@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -13,8 +13,7 @@
         
         select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; appearance: none; outline: none; }
         select:disabled { background-color: #f9f9f9; color: #aaa; border-color: #eee; }
-        select:focus { border-color: #2563eb; }
-
+        
         /* ETA Box */
         #result { margin-top: 25px; display: none; }
         .eta-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
@@ -74,7 +73,7 @@
         let allRoutes = [];
         let kmbStopMap = {}; 
 
-        // Start KMB Dictionary load
+        // Load KMB Dictionary in background
         fetchKMBStopNames();
 
         // --- 1. COMPANY CHANGED ---
@@ -96,7 +95,7 @@
             } catch (err) { alert("Error loading routes."); }
         });
 
-        // --- 2. ROUTE CHANGED ---
+        // --- 2. ROUTE CHANGED (FIXED) ---
         els.route.addEventListener('change', (e) => {
             const routeNo = e.target.value;
             const company = els.company.value;
@@ -106,12 +105,16 @@
             let options = [];
 
             if (company === 'kmb') {
+                // KMB LOGIC: Trust the API's 'dest_en' for BOTH directions
                 const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
                 options = variants.map(v => ({
                     val: v.bound === 'I' ? 'inbound' : 'outbound',
-                    txt: v.bound === 'I' ? `To ${v.orig_en}` : `To ${v.dest_en}`
+                    // OLD BUGGY CODE: v.bound === 'I' ? `To ${v.orig_en}` : ...
+                    // FIXED CODE: Always use dest_en because KMB swaps it for us
+                    txt: `To ${v.dest_en}` 
                 }));
             } else {
+                // CITYBUS LOGIC: We still need to manually swap because they only give 1 entry
                 const r = allRoutes.find(x => x.route === routeNo);
                 if (r) {
                     options = [
@@ -120,7 +123,9 @@
                     ];
                 }
             }
-            const uniqueOptions = [...new Map(options.map(item => [item.val, item])).values()];
+            
+            // Filter out exact duplicates (for Circular routes)
+            const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
             
             els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
             uniqueOptions.forEach(o => {
@@ -129,7 +134,7 @@
             els.direction.disabled = false;
         });
 
-        // --- 3. DIRECTION CHANGED (FIXED FOR CITYBUS) ---
+        // --- 3. DIRECTION CHANGED ---
         els.direction.addEventListener('change', async (e) => {
             const dir = e.target.value;
             const route = els.route.value;
@@ -139,7 +144,6 @@
             els.stop.innerHTML = '<option>Loading Stops...</option>';
 
             try {
-                // Step A: Get List of Stop IDs
                 let url;
                 if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
                 else url = `/api/ctb/stops/${route}/${dir}`;
@@ -147,43 +151,37 @@
                 const res = await fetch(url);
                 const json = await res.json();
                 
-                // Step B: Resolve Names
                 let stopsWithNames = [];
                 
                 if (company === 'kmb') {
                     // KMB: Use Dictionary
                     stopsWithNames = json.data.map(s => ({
                         id: s.stop,
-                        seq: s.seq,
+                        seq: parseInt(s.seq),
                         name: kmbStopMap[s.stop] || `Stop ${s.stop}`
                     }));
                 } else {
-                    // CITYBUS: Must fetch individual names (The Fix)
+                    // CITYBUS: Fetch names individually
                     els.stop.innerHTML = '<option>Fetching Stop Names...</option>';
-                    
-                    // Create an array of Fetch Promises
                     const nameRequests = json.data.map(async (s) => {
                         try {
                             const nameRes = await fetch(`/api/ctb/stop-name/${s.stop}`);
                             const nameData = await nameRes.json();
                             return {
                                 id: s.stop,
-                                seq: s.seq,
+                                seq: parseInt(s.seq),
                                 name: nameData.data ? nameData.data.name_en : `Stop ${s.stop}`
                             };
                         } catch (err) {
-                            return { id: s.stop, seq: s.seq, name: `Stop ${s.stop}` };
+                            return { id: s.stop, seq: parseInt(s.seq), name: `Stop ${s.stop}` };
                         }
                     });
-
-                    // Wait for all fetches to finish
                     stopsWithNames = await Promise.all(nameRequests);
                 }
                 
-                // Sort by Sequence to be safe
+                // Sort by Sequence
                 stopsWithNames.sort((a,b) => a.seq - b.seq);
 
-                // Step C: Render Dropdown
                 els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
                 stopsWithNames.forEach(s => {
                     els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`;
@@ -246,7 +244,7 @@
             }
         });
 
-        // --- HELPER FUNCTIONS ---
+        // --- HELPERS ---
         async function fetchKMBStopNames() {
             try {
                 const res = await fetch('/api/kmb/stop-names');
@@ -270,4 +268,3 @@
     </script>
 </body>
 </html>
- 
