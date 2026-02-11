@@ -5,266 +5,170 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HK Bus Tracker</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; background: #f4f4f5; color: #333; }
-        h2 { text-align: center; color: #111; margin-bottom: 20px; }
-        
+        body { font-family: -apple-system, sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; background: #f4f4f5; color: #333; }
         .control-group { margin-bottom: 15px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; appearance: none; outline: none; }
-        select:disabled { background-color: #f9f9f9; color: #aaa; border-color: #eee; }
-        
-        /* ETA Box */
+        label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 8px; text-transform: uppercase; }
+        select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        /* ETA Cards */
         #result { margin-top: 25px; display: none; }
         .eta-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .eta-time { font-size: 24px; font-weight: 800; color: #2563eb; }
-        .eta-info { text-align: right; }
         .eta-dest { font-size: 14px; font-weight: 600; display: block; }
         .eta-desc { font-size: 12px; color: #666; }
-        
-        .loading-text { text-align:center; color:#666; font-size:14px; padding:20px; }
     </style>
 </head>
 <body>
 
-    <h2>HK Bus Tracker</h2>
+    <h2 style="text-align:center">HK Bus Tracker</h2>
     
-    <div class="control-group">
-        <label>1. Bus Company</label>
-        <select id="companySelect">
-            <option value="" disabled selected>Select Company</option>
-            <option value="kmb">KMB (Kowloon Motor Bus)</option>
-            <option value="ctb">Citybus</option>
-        </select>
-    </div>
-
-    <div class="control-group">
-        <label>2. Route</label>
-        <select id="routeSelect" disabled>
-            <option>Select...</option>
-        </select>
-    </div>
-
-    <div class="control-group">
-        <label>3. Direction</label>
-        <select id="directionSelect" disabled>
-            <option>Select...</option>
-        </select>
-    </div>
-
-    <div class="control-group">
-        <label>4. Bus Stop</label>
-        <select id="stopSelect" disabled>
-            <option>Select...</option>
-        </select>
-    </div>
-
+    <div class="control-group"><label>1. Company</label><select id="company"><option value="" disabled selected>Select Company</option><option value="kmb">KMB</option><option value="ctb">Citybus</option></select></div>
+    <div class="control-group"><label>2. Route</label><select id="route" disabled><option>Select...</option></select></div>
+    <div class="control-group"><label>3. Direction</label><select id="direction" disabled><option>Select...</option></select></div>
+    <div class="control-group"><label>4. Bus Stop</label><select id="stop" disabled><option>Select...</option></select></div>
     <div id="result"></div>
 
     <script>
-        const els = {
-            company: document.getElementById('companySelect'),
-            route: document.getElementById('routeSelect'),
-            direction: document.getElementById('directionSelect'),
-            stop: document.getElementById('stopSelect'),
-            result: document.getElementById('result')
+        // --- STATE & ELEMENTS ---
+        const els = { co: document.getElementById('company'), rt: document.getElementById('route'), dir: document.getElementById('direction'), st: document.getElementById('stop'), res: document.getElementById('result') };
+        let state = { routes: [], kmbDict: {} };
+
+        // Background: Load KMB Dictionary
+        fetch('/api/kmb/stop-names').then(r=>r.json()).then(d => d.data.forEach(s => state.kmbDict[s.stop] = s.name_en));
+
+        // --- EVENT LISTENERS (THE MAIN LOGIC) ---
+
+        // 1. COMPANY SELECTED
+        els.co.addEventListener('change', async (e) => {
+            resetUI(['rt', 'dir', 'st']);
+            uiLoading(els.rt, "Loading Routes...");
+            
+            // Fetch and Save Routes
+            state.routes = await api.getRoutes(els.co.value);
+            
+            // Populate Dropdown
+            const uniqueRoutes = [...new Set(state.routes.map(r => r.route))].sort(naturalSort);
+            uiPopulate(els.rt, uniqueRoutes, "Select Route", true);
+        });
+
+        // 2. ROUTE SELECTED
+        els.rt.addEventListener('change', () => {
+            resetUI(['dir', 'st']);
+            
+            // Calculate Directions based on Company Logic
+            const opts = logic.getDirections(els.co.value, els.rt.value, state.routes);
+            
+            uiPopulate(els.dir, opts, "Select Direction");
+        });
+
+        // 3. DIRECTION SELECTED
+        els.dir.addEventListener('change', async () => {
+            resetUI(['st']);
+            uiLoading(els.st, "Loading Stops...");
+
+            // Fetch Stops (Handles the KMB vs Citybus complexity internally)
+            const stops = await api.getStops(els.co.value, els.rt.value, els.dir.value);
+            
+            uiPopulate(els.st, stops.map(s => ({ val: s.id, txt: `${s.seq}. ${s.name}` })), "Select Bus Stop");
+        });
+
+        // 4. STOP SELECTED (SHOW ETA)
+        els.st.addEventListener('change', async () => {
+            els.res.style.display = 'block';
+            els.res.innerHTML = '<div style="text-align:center; padding:20px; color:#666">Fetching Live ETA...</div>';
+
+            const etas = await api.getETAs(els.co.value, els.st.value, els.rt.value, els.dir.value);
+            
+            if (etas.length === 0) {
+                els.res.innerHTML = '<div style="text-align:center; padding:20px; color:#666">No upcoming buses.</div>';
+                return;
+            }
+
+            // Render Cards
+            els.res.innerHTML = etas.slice(0, 3).map(bus => `
+                <div class="eta-card">
+                    <div><span class="eta-dest">To ${bus.dest}</span><span class="eta-desc">${els.co.value.toUpperCase()}</span></div>
+                    <span class="eta-time">${bus.time}</span>
+                </div>
+            `).join('');
+        });
+
+
+        // --- HELPER FUNCTIONS (THE HEAVY LIFTING) ---
+
+        const api = {
+            getRoutes: async (co) => {
+                const url = co === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
+                const d = await fetch(url).then(r => r.json());
+                return d.data;
+            },
+            
+            getStops: async (co, rt, dir) => {
+                const url = co === 'kmb' ? `/api/kmb/stops/${rt}/${dir}/1` : `/api/ctb/stops/${rt}/${dir}`;
+                const d = await fetch(url).then(r => r.json());
+                
+                // KMB: Use Global Dictionary
+                if (co === 'kmb') {
+                    return d.data.map(s => ({ id: s.stop, seq: parseInt(s.seq), name: state.kmbDict[s.stop] || s.stop })).sort((a,b)=>a.seq-b.seq);
+                }
+                
+                // CITYBUS: Fetch names one by one
+                const promises = d.data.map(async s => {
+                    try {
+                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`).then(r=>r.json());
+                        return { id: s.stop, seq: parseInt(s.seq), name: nr.data?.name_en || s.stop };
+                    } catch(e) { return { id: s.stop, seq: s.seq, name: s.stop }; }
+                });
+                return (await Promise.all(promises)).sort((a,b)=>a.seq-b.seq);
+            },
+
+            getETAs: async (co, stopId, rt, dir) => {
+                const url = co === 'kmb' ? `/api/kmb/eta/${stopId}/${rt}/1` : `/api/ctb/eta/${stopId}/${rt}`;
+                const d = await fetch(url).then(r => r.json());
+                
+                return d.data
+                    .filter(x => {
+                        // KMB filter strict direction, CTB is loose
+                        if (co === 'kmb') return x.route === rt && x.dir === (dir === 'inbound' ? 'I' : 'O');
+                        return x.route === rt;
+                    })
+                    .map(b => {
+                        const min = b.eta ? Math.round((new Date(b.eta) - new Date())/60000) : null;
+                        return { 
+                            dest: b.dest_en, 
+                            time: min <= 0 ? "NOW" : `${min} <small>min</small>` 
+                        };
+                    });
+            }
         };
 
-        let allRoutes = [];
-        let kmbStopMap = {}; 
-
-        // Load KMB Dictionary in background
-        fetchKMBStopNames();
-
-        // --- 1. COMPANY CHANGED ---
-        els.company.addEventListener('change', async (e) => {
-            const company = e.target.value;
-            resetSelect(els.route);
-            resetSelect(els.direction);
-            resetSelect(els.stop);
-            els.result.style.display = 'none';
-            els.route.innerHTML = '<option>Loading Routes...</option>';
-
-            try {
-                const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
-                const res = await fetch(url);
-                const data = await res.json();
-                allRoutes = data.data;
-                const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
-                populateSelect(els.route, uniqueRoutes, "Select Route", true);
-            } catch (err) { alert("Error loading routes."); }
-        });
-
-        // --- 2. ROUTE CHANGED (FIXED) ---
-        els.route.addEventListener('change', (e) => {
-            const routeNo = e.target.value;
-            const company = els.company.value;
-            resetSelect(els.direction);
-            resetSelect(els.stop);
-            els.result.style.display = 'none';
-            let options = [];
-
-            if (company === 'kmb') {
-                // KMB LOGIC: Trust the API's 'dest_en' for BOTH directions
-                const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
-                options = variants.map(v => ({
-                    val: v.bound === 'I' ? 'inbound' : 'outbound',
-                    // OLD BUGGY CODE: v.bound === 'I' ? `To ${v.orig_en}` : ...
-                    // FIXED CODE: Always use dest_en because KMB swaps it for us
-                    txt: `To ${v.dest_en}` 
-                }));
-            } else {
-                // CITYBUS LOGIC: We still need to manually swap because they only give 1 entry
-                const r = allRoutes.find(x => x.route === routeNo);
-                if (r) {
-                    options = [
-                        { val: 'outbound', txt: `To ${r.dest_en}` },
-                        { val: 'inbound', txt: `To ${r.orig_en}` }
-                    ];
-                }
-            }
-            
-            // Filter out exact duplicates (for Circular routes)
-            const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
-            
-            els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
-            uniqueOptions.forEach(o => {
-                els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`;
-            });
-            els.direction.disabled = false;
-        });
-
-        // --- 3. DIRECTION CHANGED ---
-        els.direction.addEventListener('change', async (e) => {
-            const dir = e.target.value;
-            const route = els.route.value;
-            const company = els.company.value;
-
-            resetSelect(els.stop);
-            els.stop.innerHTML = '<option>Loading Stops...</option>';
-
-            try {
-                let url;
-                if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
-                else url = `/api/ctb/stops/${route}/${dir}`;
-
-                const res = await fetch(url);
-                const json = await res.json();
-                
-                let stopsWithNames = [];
-                
-                if (company === 'kmb') {
-                    // KMB: Use Dictionary
-                    stopsWithNames = json.data.map(s => ({
-                        id: s.stop,
-                        seq: parseInt(s.seq),
-                        name: kmbStopMap[s.stop] || `Stop ${s.stop}`
-                    }));
+        const logic = {
+            getDirections: (co, rt, routes) => {
+                let opts = [];
+                if (co === 'kmb') {
+                    // KMB: Trust 'dest_en' for both I and O
+                    const vars = routes.filter(r => r.route === rt && r.service_type == '1');
+                    opts = vars.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
                 } else {
-                    // CITYBUS: Fetch names individually
-                    els.stop.innerHTML = '<option>Fetching Stop Names...</option>';
-                    const nameRequests = json.data.map(async (s) => {
-                        try {
-                            const nameRes = await fetch(`/api/ctb/stop-name/${s.stop}`);
-                            const nameData = await nameRes.json();
-                            return {
-                                id: s.stop,
-                                seq: parseInt(s.seq),
-                                name: nameData.data ? nameData.data.name_en : `Stop ${s.stop}`
-                            };
-                        } catch (err) {
-                            return { id: s.stop, seq: parseInt(s.seq), name: `Stop ${s.stop}` };
-                        }
-                    });
-                    stopsWithNames = await Promise.all(nameRequests);
+                    // CTB: Manual Swap
+                    const r = routes.find(x => x.route === rt);
+                    if (r) opts = [{ val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` }];
                 }
-                
-                // Sort by Sequence
-                stopsWithNames.sort((a,b) => a.seq - b.seq);
-
-                els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
-                stopsWithNames.forEach(s => {
-                    els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`;
-                });
-                els.stop.disabled = false;
-
-            } catch (err) {
-                console.error(err);
-                els.stop.innerHTML = '<option>Error loading stops</option>';
+                // Unique Filter
+                return [...new Map(opts.map(i => [i.txt, i])).values()];
             }
-        });
+        };
 
-        // --- 4. STOP CHANGED ---
-        els.stop.addEventListener('change', async (e) => {
-            const stopId = e.target.value;
-            const route = els.route.value;
-            const company = els.company.value;
-            
-            els.result.style.display = 'block';
-            els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
-
-            try {
-                let url;
-                if (company === 'kmb') url = `/api/kmb/eta/${stopId}/${route}/1`;
-                else url = `/api/ctb/eta/${stopId}/${route}`;
-
-                const res = await fetch(url);
-                const json = await res.json();
-                
-                const etas = json.data.filter(x => {
-                    if(company === 'kmb') return x.route === route && x.dir === (els.direction.value === 'inbound' ? 'I' : 'O');
-                    return x.route === route; 
-                });
-
-                if (etas.length === 0) {
-                    els.result.innerHTML = '<div class="loading-text">No upcoming buses found.</div>';
-                    return;
-                }
-
-                let html = '';
-                etas.slice(0, 3).forEach(bus => {
-                    let timeDisplay = "---";
-                    if (bus.eta) {
-                        const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
-                        timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins} <span style='font-size:14px; font-weight:normal'>min</span>`;
-                    }
-                    html += `
-                        <div class="eta-card">
-                            <div class="eta-info">
-                                <span class="eta-dest">To ${bus.dest_en}</span>
-                                <span class="eta-desc">${company.toUpperCase()}</span>
-                            </div>
-                            <span class="eta-time">${timeDisplay}</span>
-                        </div>`;
-                });
-                els.result.innerHTML = html;
-
-            } catch (err) {
-                els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>';
-            }
-        });
-
-        // --- HELPERS ---
-        async function fetchKMBStopNames() {
-            try {
-                const res = await fetch('/api/kmb/stop-names');
-                const json = await res.json();
-                json.data.forEach(s => { kmbStopMap[s.stop] = s.name_en; });
-            } catch (e) {}
-        }
-        function resetSelect(el) {
-            el.innerHTML = '<option>Select...</option>';
-            el.disabled = true;
-            el.value = "";
-        }
-        function populateSelect(el, items, placeholder, isSimple = false) {
-            el.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
-            items.forEach(i => {
-                el.innerHTML += `<option value="${isSimple?i:i.val}">${isSimple?i:i.txt}</option>`;
-            });
+        // UI Helpers
+        const resetUI = (keys) => keys.forEach(k => { els[k].innerHTML = '<option>Select...</option>'; els[k].disabled = true; });
+        const uiLoading = (el, txt) => el.innerHTML = `<option>${txt}</option>`;
+        const uiPopulate = (el, items, title, isSimple) => {
+            el.innerHTML = `<option value="" disabled selected>${title}</option>` + 
+            items.map(i => `<option value="${isSimple?i:i.val}">${isSimple?i:i.txt}</option>`).join('');
             el.disabled = false;
-        }
+        };
         const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
     </script>
 </body>
 </html>
+ 
