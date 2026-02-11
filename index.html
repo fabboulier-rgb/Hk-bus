@@ -1,8 +1,131 @@
-{
-  "rewrites": [
-    { "source": "/api/kmb/route", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route/" },
-    { "source": "/api/kmb/stops/:path*", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route-stop/:path*" },
-    { "source": "/api/ctb/route", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route/ctb" },
-    { "source": "/api/ctb/stops/:path*", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route-stop/ctb/:path*" }
-  ]
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HK Bus Tracker</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; background: #f4f4f5; }
+        .control-group { margin-bottom: 15px; background: white; padding: 15px; border-radius: 12px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 5px; }
+        select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h2>HK Bus Tracker</h2>
+    
+    <div class="control-group">
+        <label>1. Company</label>
+        <select id="companySelect">
+            <option value="" disabled selected>Select Company</option>
+            <option value="kmb">KMB</option>
+            <option value="ctb">Citybus</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <label>2. Route</label>
+        <select id="routeSelect" disabled><option>Select...</option></select>
+    </div>
+
+    <div class="control-group">
+        <label>3. Direction</label>
+        <select id="directionSelect" disabled><option>Select...</option></select>
+    </div>
+
+    <div class="control-group">
+        <label>4. Bus Stop</label>
+        <select id="stopSelect" disabled><option>Select...</option></select>
+    </div>
+
+    <div id="result" style="margin-top:20px; font-weight:bold;"></div>
+
+    <script>
+        const els = {
+            company: document.getElementById('companySelect'),
+            route: document.getElementById('routeSelect'),
+            direction: document.getElementById('directionSelect'),
+            stop: document.getElementById('stopSelect'),
+            result: document.getElementById('result')
+        };
+
+        let allRoutes = [];
+
+        // 1. COMPANY CHANGED
+        els.company.addEventListener('change', async (e) => {
+            els.route.innerHTML = '<option>Loading...</option>';
+            els.direction.innerHTML = '<option>Select...</option>';
+            els.stop.innerHTML = '<option>Select...</option>';
+            
+            const company = e.target.value;
+            const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
+            
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            allRoutes = data.data;
+            
+            // Get unique route numbers
+            const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort();
+            
+            els.route.innerHTML = '<option value="" disabled selected>Select Route</option>';
+            uniqueRoutes.forEach(r => {
+                els.route.innerHTML += `<option value="${r}">${r}</option>`;
+            });
+            els.route.disabled = false;
+        });
+
+        // 2. ROUTE CHANGED
+        els.route.addEventListener('change', (e) => {
+            const routeNo = e.target.value;
+            const company = els.company.value;
+            
+            els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
+            
+            if (company === 'kmb') {
+                const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
+                variants.forEach(v => {
+                    const val = v.bound === 'I' ? 'inbound' : 'outbound';
+                    const txt = v.bound === 'I' ? `To ${v.orig_tc}` : `To ${v.dest_tc}`;
+                    els.direction.innerHTML += `<option value="${val}">${txt}</option>`;
+                });
+            } else {
+                // Citybus Logic
+                const routeData = allRoutes.find(r => r.route === routeNo);
+                if (routeData) {
+                    els.direction.innerHTML += `<option value="outbound">To ${routeData.dest_tc}</option>`;
+                    els.direction.innerHTML += `<option value="inbound">To ${routeData.orig_tc}</option>`;
+                }
+            }
+            els.direction.disabled = false;
+        });
+
+        // 3. DIRECTION CHANGED
+        els.direction.addEventListener('change', async (e) => {
+            const dir = e.target.value;
+            const route = els.route.value;
+            const company = els.company.value;
+
+            els.stop.innerHTML = '<option>Loading stops...</option>';
+            
+            let url;
+            if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
+            else url = `/api/ctb/stops/${route}/${dir}`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            els.stop.innerHTML = '<option value="" disabled selected>Select Stop</option>';
+            data.data.forEach(s => {
+                els.stop.innerHTML += `<option value="${s.stop}">${s.seq}. ${s.name_tc}</option>`;
+            });
+            els.stop.disabled = false;
+        });
+
+        // 4. STOP CHANGED (Final Step)
+        els.stop.addEventListener('change', (e) => {
+             els.result.innerText = `You selected Stop ID: ${e.target.value}. Ready to fetch ETA!`;
+        });
+    </script>
+</body>
+</html>
