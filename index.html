@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -15,7 +15,7 @@
         select:disabled { background-color: #f9f9f9; color: #aaa; border-color: #eee; }
         select:focus { border-color: #2563eb; }
 
-        /* The ETA Result Box */
+        /* ETA Box */
         #result { margin-top: 25px; display: none; }
         .eta-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
         .eta-time { font-size: 24px; font-weight: 800; color: #2563eb; }
@@ -63,7 +63,6 @@
     <div id="result"></div>
 
     <script>
-        // --- CONFIGURATION ---
         const els = {
             company: document.getElementById('companySelect'),
             route: document.getElementById('routeSelect'),
@@ -73,60 +72,46 @@
         };
 
         let allRoutes = [];
-        let kmbStopMap = {}; // Stores "C1234" -> "Mong Kok Market"
+        let kmbStopMap = {}; 
 
-        // Start loading KMB names immediately in background
+        // Start KMB Dictionary load
         fetchKMBStopNames();
 
         // --- 1. COMPANY CHANGED ---
         els.company.addEventListener('change', async (e) => {
             const company = e.target.value;
-            
-            // Reset UI
             resetSelect(els.route);
             resetSelect(els.direction);
             resetSelect(els.stop);
             els.result.style.display = 'none';
-            
             els.route.innerHTML = '<option>Loading Routes...</option>';
 
             try {
                 const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
                 const res = await fetch(url);
                 const data = await res.json();
-                
                 allRoutes = data.data;
-
-                // Sort and Unique the routes
                 const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
-                
                 populateSelect(els.route, uniqueRoutes, "Select Route", true);
-
-            } catch (err) {
-                alert("Error loading routes. Please refresh.");
-            }
+            } catch (err) { alert("Error loading routes."); }
         });
 
         // --- 2. ROUTE CHANGED ---
         els.route.addEventListener('change', (e) => {
             const routeNo = e.target.value;
             const company = els.company.value;
-            
             resetSelect(els.direction);
             resetSelect(els.stop);
             els.result.style.display = 'none';
-
             let options = [];
 
             if (company === 'kmb') {
-                // KMB Logic
                 const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
                 options = variants.map(v => ({
                     val: v.bound === 'I' ? 'inbound' : 'outbound',
                     txt: v.bound === 'I' ? `To ${v.orig_en}` : `To ${v.dest_en}`
                 }));
             } else {
-                // Citybus Logic
                 const r = allRoutes.find(x => x.route === routeNo);
                 if (r) {
                     options = [
@@ -135,8 +120,6 @@
                     ];
                 }
             }
-            
-            // Remove duplicates
             const uniqueOptions = [...new Map(options.map(item => [item.val, item])).values()];
             
             els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
@@ -146,7 +129,7 @@
             els.direction.disabled = false;
         });
 
-        // --- 3. DIRECTION CHANGED ---
+        // --- 3. DIRECTION CHANGED (FIXED FOR CITYBUS) ---
         els.direction.addEventListener('change', async (e) => {
             const dir = e.target.value;
             const route = els.route.value;
@@ -156,6 +139,7 @@
             els.stop.innerHTML = '<option>Loading Stops...</option>';
 
             try {
+                // Step A: Get List of Stop IDs
                 let url;
                 if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
                 else url = `/api/ctb/stops/${route}/${dir}`;
@@ -163,20 +147,46 @@
                 const res = await fetch(url);
                 const json = await res.json();
                 
-                els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
+                // Step B: Resolve Names
+                let stopsWithNames = [];
                 
-                json.data.forEach(s => {
-                    let stopName = "";
-                    let stopId = s.stop;
+                if (company === 'kmb') {
+                    // KMB: Use Dictionary
+                    stopsWithNames = json.data.map(s => ({
+                        id: s.stop,
+                        seq: s.seq,
+                        name: kmbStopMap[s.stop] || `Stop ${s.stop}`
+                    }));
+                } else {
+                    // CITYBUS: Must fetch individual names (The Fix)
+                    els.stop.innerHTML = '<option>Fetching Stop Names...</option>';
+                    
+                    // Create an array of Fetch Promises
+                    const nameRequests = json.data.map(async (s) => {
+                        try {
+                            const nameRes = await fetch(`/api/ctb/stop-name/${s.stop}`);
+                            const nameData = await nameRes.json();
+                            return {
+                                id: s.stop,
+                                seq: s.seq,
+                                name: nameData.data ? nameData.data.name_en : `Stop ${s.stop}`
+                            };
+                        } catch (err) {
+                            return { id: s.stop, seq: s.seq, name: `Stop ${s.stop}` };
+                        }
+                    });
 
-                    if (company === 'ctb') {
-                        stopName = s.name_en; // Citybus gives name directly
-                    } else {
-                        // KMB Lookup
-                        stopName = kmbStopMap[stopId] || `Stop ${stopId}`;
-                    }
+                    // Wait for all fetches to finish
+                    stopsWithNames = await Promise.all(nameRequests);
+                }
+                
+                // Sort by Sequence to be safe
+                stopsWithNames.sort((a,b) => a.seq - b.seq);
 
-                    els.stop.innerHTML += `<option value="${stopId}">${s.seq}. ${stopName}</option>`;
+                // Step C: Render Dropdown
+                els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
+                stopsWithNames.forEach(s => {
+                    els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`;
                 });
                 els.stop.disabled = false;
 
@@ -186,7 +196,7 @@
             }
         });
 
-        // --- 4. STOP CHANGED (FETCH ETA) ---
+        // --- 4. STOP CHANGED ---
         els.stop.addEventListener('change', async (e) => {
             const stopId = e.target.value;
             const route = els.route.value;
@@ -203,7 +213,6 @@
                 const res = await fetch(url);
                 const json = await res.json();
                 
-                // Filter Logic
                 const etas = json.data.filter(x => {
                     if(company === 'kmb') return x.route === route && x.dir === (els.direction.value === 'inbound' ? 'I' : 'O');
                     return x.route === route; 
@@ -214,23 +223,13 @@
                     return;
                 }
 
-                // Render Results
                 let html = '';
                 etas.slice(0, 3).forEach(bus => {
-                    let timeDisplay = "";
-                    
+                    let timeDisplay = "---";
                     if (bus.eta) {
-                        const date = new Date(bus.eta);
-                        const now = new Date();
-                        const diffMs = date - now;
-                        const diffMins = Math.round(diffMs / 60000);
-                        
-                        if (diffMins <= 0) timeDisplay = "NOW";
-                        else timeDisplay = `${diffMins} <span style='font-size:14px; font-weight:normal'>min</span>`;
-                    } else {
-                        timeDisplay = "---";
+                        const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
+                        timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins} <span style='font-size:14px; font-weight:normal'>min</span>`;
                     }
-                    
                     html += `
                         <div class="eta-card">
                             <div class="eta-info">
@@ -238,8 +237,7 @@
                                 <span class="eta-desc">${company.toUpperCase()}</span>
                             </div>
                             <span class="eta-time">${timeDisplay}</span>
-                        </div>
-                    `;
+                        </div>`;
                 });
                 els.result.innerHTML = html;
 
@@ -249,38 +247,27 @@
         });
 
         // --- HELPER FUNCTIONS ---
-        
         async function fetchKMBStopNames() {
-            // Background fetch of the massive KMB stop list
             try {
                 const res = await fetch('/api/kmb/stop-names');
                 const json = await res.json();
-                json.data.forEach(s => {
-                    kmbStopMap[s.stop] = s.name_en;
-                });
-                console.log("KMB Dictionary Loaded");
-            } catch (e) {
-                console.log("Dictionary Load Failed");
-            }
+                json.data.forEach(s => { kmbStopMap[s.stop] = s.name_en; });
+            } catch (e) {}
         }
-
         function resetSelect(el) {
             el.innerHTML = '<option>Select...</option>';
             el.disabled = true;
             el.value = "";
         }
-        
-        function populateSelect(el, items, placeholder, isSimpleArray = false) {
+        function populateSelect(el, items, placeholder, isSimple = false) {
             el.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
             items.forEach(i => {
-                const val = isSimpleArray ? i : i.val;
-                const txt = isSimpleArray ? i : i.txt;
-                el.innerHTML += `<option value="${val}">${txt}</option>`;
+                el.innerHTML += `<option value="${isSimple?i:i.val}">${isSimple?i:i.txt}</option>`;
             });
             el.disabled = false;
         }
-
         const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
     </script>
 </body>
 </html>
+ 
