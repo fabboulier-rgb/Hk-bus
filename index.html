@@ -2,64 +2,274 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HK Bus Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; background: #f4f4f5; color: #333; }
-        h2 { text-align: center; color: #111; margin-bottom: 20px; }
+        :root {
+            --bg: #fafafa;
+            --surface: #ffffff;
+            --border: #eaeaea;
+            --text-primary: #111111;
+            --text-secondary: #666666;
+            --accent: #0070f3; /* Vercel Blue */
+            --accent-glow: rgba(0, 112, 243, 0.1);
+            --radius: 8px;
+            --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body { 
+            font-family: var(--font-stack);
+            background: var(--bg);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            justify-content: center;
+        }
+
+        main {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        /* Header */
+        header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
         
-        .control-group { margin-bottom: 15px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        h2 { 
+            font-weight: 700; 
+            font-size: 24px; 
+            letter-spacing: -0.03em;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Form Controls */
+        .control-group { 
+            margin-bottom: 20px; 
+            position: relative;
+        }
+
+        label { 
+            display: block; 
+            font-size: 12px; 
+            font-weight: 600; 
+            color: var(--text-secondary); 
+            margin-bottom: 8px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em;
+        }
         
-        select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; appearance: none; outline: none; }
-        select:disabled { background-color: #f9f9f9; color: #aaa; border-color: #eee; }
+        /* Custom Select Styling */
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '';
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 10px;
+            height: 6px;
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            pointer-events: none;
+            transition: transform 0.2s ease;
+        }
+
+        select { 
+            width: 100%; 
+            padding: 14px 16px; 
+            font-size: 15px; 
+            font-family: var(--font-stack);
+            color: var(--text-primary);
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            appearance: none; /* Remove default arrow */
+            outline: none;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        select:focus {
+            border-color: var(--text-secondary);
+            box-shadow: 0 0 0 4px var(--border);
+        }
+
+        select:disabled { 
+            background-color: #f5f5f5; 
+            color: #999; 
+            cursor: not-allowed;
+            border-color: transparent;
+            box-shadow: none;
+        }
+
+        /* ETA Results */
+        #result { 
+            margin-top: 30px; 
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ETA Card Design */
+        .eta-card { 
+            background: var(--surface); 
+            padding: 20px; 
+            border-radius: 12px; 
+            margin-bottom: 12px; 
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+            display: flex; 
+            flex-direction: row-reverse; /* Flip layout for emphasis on time */
+            justify-content: space-between; 
+            align-items: center; 
+            transition: transform 0.2s;
+        }
+
+        .eta-card:active {
+            transform: scale(0.98);
+        }
+
+        .eta-time { 
+            font-size: 32px; 
+            font-weight: 700; 
+            color: var(--text-primary); 
+            letter-spacing: -1px;
+            font-feature-settings: "tnum";
+            min-width: 80px;
+            text-align: right;
+        }
+
+        .eta-time span {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: block;
+            margin-top: -5px;
+        }
+
+        .eta-info { 
+            text-align: left; 
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .eta-dest { 
+            font-size: 16px; 
+            font-weight: 600; 
+            color: var(--text-primary);
+        }
+
+        .eta-desc { 
+            font-size: 12px; 
+            font-weight: 500;
+            color: var(--accent);
+            background: var(--accent-glow);
+            padding: 4px 8px;
+            border-radius: 99px;
+            align-self: flex-start;
+            text-transform: uppercase;
+        }
         
-        /* ETA Box */
-        #result { margin-top: 25px; display: none; }
-        .eta-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
-        .eta-time { font-size: 24px; font-weight: 800; color: #2563eb; }
-        .eta-info { text-align: right; }
-        .eta-dest { font-size: 14px; font-weight: 600; display: block; }
-        .eta-desc { font-size: 12px; color: #666; }
-        
-        .loading-text { text-align:center; color:#666; font-size:14px; padding:20px; }
+        /* Loading State */
+        .loading-text { 
+            text-align: center; 
+            color: var(--text-secondary); 
+            font-size: 14px; 
+            padding: 20px; 
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* SVG Icon for Logo */
+        .bus-icon {
+            width: 24px;
+            height: 24px;
+            background: #111;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+
     </style>
 </head>
 <body>
 
-    <h2>HK Bus Tracker</h2>
+<main>
+    <header>
+        <h2>
+            <div class="bus-icon">HK</div>
+            Bus Tracker
+        </h2>
+    </header>
     
     <div class="control-group">
         <label>1. Bus Company</label>
-        <select id="companySelect">
-            <option value="" disabled selected>Select Company</option>
-            <option value="kmb">KMB (Kowloon Motor Bus)</option>
-            <option value="ctb">Citybus</option>
-        </select>
+        <div class="select-wrapper">
+            <select id="companySelect">
+                <option value="" disabled selected>Select Company</option>
+                <option value="kmb">KMB (Kowloon Motor Bus)</option>
+                <option value="ctb">Citybus</option>
+            </select>
+        </div>
     </div>
 
     <div class="control-group">
         <label>2. Route</label>
-        <select id="routeSelect" disabled>
-            <option>Select...</option>
-        </select>
+        <div class="select-wrapper">
+            <select id="routeSelect" disabled>
+                <option>Select...</option>
+            </select>
+        </div>
     </div>
 
     <div class="control-group">
         <label>3. Direction</label>
-        <select id="directionSelect" disabled>
-            <option>Select...</option>
-        </select>
+        <div class="select-wrapper">
+            <select id="directionSelect" disabled>
+                <option>Select...</option>
+            </select>
+        </div>
     </div>
 
     <div class="control-group">
         <label>4. Bus Stop</label>
-        <select id="stopSelect" disabled>
-            <option>Select...</option>
-        </select>
+        <div class="select-wrapper">
+            <select id="stopSelect" disabled>
+                <option>Select...</option>
+            </select>
+        </div>
     </div>
 
     <div id="result"></div>
+</main>
 
     <script>
         const els = {
@@ -226,11 +436,13 @@
                     let timeDisplay = "---";
                     if (bus.eta) {
                         const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
-                        timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins} <span style='font-size:14px; font-weight:normal'>min</span>`;
+                        // CHANGED: Minor update to html string to include a span wrapper for styling, 
+                        // logic remains identical to original calculation.
+                        timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`;
                     }
                     html += `
                         <div class="eta-card">
-                            <div class="eta-info">
+                             <div class="eta-info">
                                 <span class="eta-dest">To ${bus.dest_en}</span>
                                 <span class="eta-desc">${company.toUpperCase()}</span>
                             </div>
