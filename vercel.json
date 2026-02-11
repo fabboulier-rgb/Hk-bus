@@ -2,7 +2,10 @@
   "rewrites": [
     { "source": "/api/kmb/route", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route/" },
     { "source": "/api/kmb/stops/:path*", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route-stop/:path*" },
+    { "source": "/api/kmb/stop-names", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/stop" },
+    { "source": "/api/kmb/eta/:stop/:route/:type", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/eta/:stop/:route/:type" },
     { "source": "/api/ctb/route", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route/ctb" },
-    { "source": "/api/ctb/stops/:path*", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route-stop/ctb/:path*" }
+    { "source": "/api/ctb/stops/:path*", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route-stop/ctb/:path*" },
+    { "source": "/api/ctb/eta/:stop/:route", "destination": "https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/:stop/:route" }
   ]
 }
