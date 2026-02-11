@@ -6,17 +6,24 @@
     <title>HK Bus Tracker</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 500px; margin: 0 auto; background: #f4f4f5; color: #333; }
-        h2 { text-align: center; color: #111; }
-        .control-group { margin-bottom: 15px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        label { display: block; font-size: 12px; font-weight: 700; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-        select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; appearance: none; }
-        select:disabled { background-color: #f9f9f9; color: #999; }
+        h2 { text-align: center; color: #111; margin-bottom: 20px; }
         
+        .control-group { margin-bottom: 15px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        select { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 8px; background-color: #fff; appearance: none; outline: none; }
+        select:disabled { background-color: #f9f9f9; color: #aaa; border-color: #eee; }
+        select:focus { border-color: #2563eb; }
+
         /* The ETA Result Box */
-        #result { margin-top: 25px; padding: 20px; border-radius: 12px; text-align: center; display: none; }
-        .eta-box { background: #2563eb; color: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
-        .eta-time { font-size: 28px; font-weight: bold; display: block; }
-        .eta-desc { font-size: 14px; opacity: 0.9; }
+        #result { margin-top: 25px; display: none; }
+        .eta-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .eta-time { font-size: 24px; font-weight: 800; color: #2563eb; }
+        .eta-info { text-align: right; }
+        .eta-dest { font-size: 14px; font-weight: 600; display: block; }
+        .eta-desc { font-size: 12px; color: #666; }
+        
+        .loading-text { text-align:center; color:#666; font-size:14px; padding:20px; }
     </style>
 </head>
 <body>
@@ -56,6 +63,7 @@
     <div id="result"></div>
 
     <script>
+        // --- CONFIGURATION ---
         const els = {
             company: document.getElementById('companySelect'),
             route: document.getElementById('routeSelect'),
@@ -64,15 +72,17 @@
             result: document.getElementById('result')
         };
 
-        // Data Storage
         let allRoutes = [];
-        let kmbStopMap = {}; // We will store "C1234" -> "Mong Kok Market" here
+        let kmbStopMap = {}; // Stores "C1234" -> "Mong Kok Market"
+
+        // Start loading KMB names immediately in background
+        fetchKMBStopNames();
 
         // --- 1. COMPANY CHANGED ---
         els.company.addEventListener('change', async (e) => {
             const company = e.target.value;
             
-            // Clear everything to prevent bugs
+            // Reset UI
             resetSelect(els.route);
             resetSelect(els.direction);
             resetSelect(els.stop);
@@ -81,11 +91,6 @@
             els.route.innerHTML = '<option>Loading Routes...</option>';
 
             try {
-                // If KMB, we start downloading the stop names in the background
-                if (company === 'kmb' && Object.keys(kmbStopMap).length === 0) {
-                    fetchKMBStopNames(); 
-                }
-
                 const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
                 const res = await fetch(url);
                 const data = await res.json();
@@ -95,7 +100,7 @@
                 // Sort and Unique the routes
                 const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
                 
-                populateSelect(els.route, uniqueRoutes, "Select Route");
+                populateSelect(els.route, uniqueRoutes, "Select Route", true);
 
             } catch (err) {
                 alert("Error loading routes. Please refresh.");
@@ -114,7 +119,7 @@
             let options = [];
 
             if (company === 'kmb') {
-                // KMB Logic (Use Service Type 1 for main routes)
+                // KMB Logic
                 const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
                 options = variants.map(v => ({
                     val: v.bound === 'I' ? 'inbound' : 'outbound',
@@ -131,7 +136,7 @@
                 }
             }
             
-            // Remove duplicates (sometimes happens)
+            // Remove duplicates
             const uniqueOptions = [...new Map(options.map(item => [item.val, item])).values()];
             
             els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
@@ -161,15 +166,13 @@
                 els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
                 
                 json.data.forEach(s => {
-                    let stopName = "Unknown";
+                    let stopName = "";
                     let stopId = s.stop;
 
                     if (company === 'ctb') {
-                        // Citybus gives the name directly
-                        stopName = s.name_en;
+                        stopName = s.name_en; // Citybus gives name directly
                     } else {
-                        // KMB gives ONLY ID. We must look it up in our map
-                        // If map isn't ready yet, show ID
+                        // KMB Lookup
                         stopName = kmbStopMap[stopId] || `Stop ${stopId}`;
                     }
 
@@ -190,68 +193,74 @@
             const company = els.company.value;
             
             els.result.style.display = 'block';
-            els.result.innerHTML = '<div class="eta-box">Loading ETA...</div>';
+            els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
 
             try {
                 let url;
-                // KMB requires service type '1'
                 if (company === 'kmb') url = `/api/kmb/eta/${stopId}/${route}/1`;
                 else url = `/api/ctb/eta/${stopId}/${route}`;
 
                 const res = await fetch(url);
                 const json = await res.json();
                 
-                // Filter the list for relevant updates
+                // Filter Logic
                 const etas = json.data.filter(x => {
-                    // Specific filter to ensure we match the right route/dir
                     if(company === 'kmb') return x.route === route && x.dir === (els.direction.value === 'inbound' ? 'I' : 'O');
-                    return x.route === route; // CTB is simpler
+                    return x.route === route; 
                 });
 
                 if (etas.length === 0) {
-                    els.result.innerHTML = '<div class="eta-box" style="background:#666">No upcoming buses found.</div>';
+                    els.result.innerHTML = '<div class="loading-text">No upcoming buses found.</div>';
                     return;
                 }
 
-                // Show top 3 buses
+                // Render Results
                 let html = '';
                 etas.slice(0, 3).forEach(bus => {
-                    // Extract time (API gives timestamp or text)
-                    let time = "Unknown";
+                    let timeDisplay = "";
+                    
                     if (bus.eta) {
                         const date = new Date(bus.eta);
                         const now = new Date();
-                        const diff = Math.round((date - now) / 60000);
-                        time = diff <= 0 ? "Now" : `${diff} min`;
+                        const diffMs = date - now;
+                        const diffMins = Math.round(diffMs / 60000);
+                        
+                        if (diffMins <= 0) timeDisplay = "NOW";
+                        else timeDisplay = `${diffMins} <span style='font-size:14px; font-weight:normal'>min</span>`;
+                    } else {
+                        timeDisplay = "---";
                     }
                     
                     html += `
-                        <div class="eta-box">
-                            <span class="eta-time">${time}</span>
-                            <span class="eta-desc">Dest: ${company === 'kmb' ? bus.dest_en : bus.dest_en}</span>
+                        <div class="eta-card">
+                            <div class="eta-info">
+                                <span class="eta-dest">To ${bus.dest_en}</span>
+                                <span class="eta-desc">${company.toUpperCase()}</span>
+                            </div>
+                            <span class="eta-time">${timeDisplay}</span>
                         </div>
                     `;
                 });
                 els.result.innerHTML = html;
 
             } catch (err) {
-                els.result.innerHTML = 'Error fetching ETA';
+                els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>';
             }
         });
 
-        // --- HELPER: FETCH KMB STOP NAMES ---
+        // --- HELPER FUNCTIONS ---
+        
         async function fetchKMBStopNames() {
-            // This runs in background. 
-            // It downloads the master list of KMB stops (Name + ID)
+            // Background fetch of the massive KMB stop list
             try {
                 const res = await fetch('/api/kmb/stop-names');
                 const json = await res.json();
                 json.data.forEach(s => {
                     kmbStopMap[s.stop] = s.name_en;
                 });
-                console.log("KMB Stop Map Loaded: " + json.data.length + " stops");
+                console.log("KMB Dictionary Loaded");
             } catch (e) {
-                console.error("Failed to load KMB stops");
+                console.log("Dictionary Load Failed");
             }
         }
 
@@ -261,93 +270,17 @@
             el.value = "";
         }
         
-        function populateSelect(el, items, placeholder) {
+        function populateSelect(el, items, placeholder, isSimpleArray = false) {
             el.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
             items.forEach(i => {
-                el.innerHTML += `<option value="${i}">${i}</option>`;
+                const val = isSimpleArray ? i : i.val;
+                const txt = isSimpleArray ? i : i.txt;
+                el.innerHTML += `<option value="${val}">${txt}</option>`;
             });
             el.disabled = false;
         }
 
-        // Helper to sort "1, 1A, 2" correctly
         const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-    </script>
-</body>
-</html>
-        els.company.addEventListener('change', async (e) => {
-            els.route.innerHTML = '<option>Loading...</option>';
-            els.direction.innerHTML = '<option>Select...</option>';
-            els.stop.innerHTML = '<option>Select...</option>';
-            
-            const company = e.target.value;
-            const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
-            
-            const res = await fetch(url);
-            const data = await res.json();
-            
-            allRoutes = data.data;
-            
-            // Get unique route numbers
-            const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort();
-            
-            els.route.innerHTML = '<option value="" disabled selected>Select Route</option>';
-            uniqueRoutes.forEach(r => {
-                els.route.innerHTML += `<option value="${r}">${r}</option>`;
-            });
-            els.route.disabled = false;
-        });
-
-        // 2. ROUTE CHANGED
-        els.route.addEventListener('change', (e) => {
-            const routeNo = e.target.value;
-            const company = els.company.value;
-            
-            els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
-            
-            if (company === 'kmb') {
-                const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
-                variants.forEach(v => {
-                    const val = v.bound === 'I' ? 'inbound' : 'outbound';
-                    const txt = v.bound === 'I' ? `To ${v.orig_tc}` : `To ${v.dest_tc}`;
-                    els.direction.innerHTML += `<option value="${val}">${txt}</option>`;
-                });
-            } else {
-                // Citybus Logic
-                const routeData = allRoutes.find(r => r.route === routeNo);
-                if (routeData) {
-                    els.direction.innerHTML += `<option value="outbound">To ${routeData.dest_tc}</option>`;
-                    els.direction.innerHTML += `<option value="inbound">To ${routeData.orig_tc}</option>`;
-                }
-            }
-            els.direction.disabled = false;
-        });
-
-        // 3. DIRECTION CHANGED
-        els.direction.addEventListener('change', async (e) => {
-            const dir = e.target.value;
-            const route = els.route.value;
-            const company = els.company.value;
-
-            els.stop.innerHTML = '<option>Loading stops...</option>';
-            
-            let url;
-            if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
-            else url = `/api/ctb/stops/${route}/${dir}`;
-
-            const res = await fetch(url);
-            const data = await res.json();
-            
-            els.stop.innerHTML = '<option value="" disabled selected>Select Stop</option>';
-            data.data.forEach(s => {
-                els.stop.innerHTML += `<option value="${s.stop}">${s.seq}. ${s.name_tc}</option>`;
-            });
-            els.stop.disabled = false;
-        });
-
-        // 4. STOP CHANGED (Final Step)
-        els.stop.addEventListener('change', (e) => {
-             els.result.innerText = `You selected Stop ID: ${e.target.value}. Ready to fetch ETA!`;
-        });
     </script>
 </body>
 </html>
