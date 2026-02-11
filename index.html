@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/kmb/route", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route/" },
+    { "source": "/api/kmb/stops/:path*", "destination": "https://data.etabus.gov.hk/v1/transport/kmb/route-stop/:path*" },
+    { "source": "/api/ctb/route", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route/ctb" },
+    { "source": "/api/ctb/stops/:path*", "destination": "https://rt.data.gov.hk/v2/transport/citybus/route-stop/ctb/:path*" }
+  ]
+}
