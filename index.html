@@ -39,6 +39,24 @@
         header { margin-bottom: 20px; text-align: center; }
         h2 { font-weight: 700; font-size: 24px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
 
+        /* LOCATION TOGGLE */
+        .location-bar {
+            background: white; padding: 10px 15px; border-radius: 99px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border: 1px solid var(--border);
+        }
+        .loc-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        
+        /* The Switch Box */
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(18px); }
+
+        /* CONTROLS */
         .control-group { margin-bottom: 15px; position: relative; }
         label { display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
         
@@ -59,22 +77,17 @@
 
         select:focus, input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 4px var(--border); }
         select:disabled, input:disabled { background-color: #f5f5f5; color: #999; cursor: not-allowed; border-color: transparent; box-shadow: none; }
-
-        /* FORCE UPPERCASE INPUT */
         #routeInput { text-transform: uppercase; }
 
-        /* RESULT AREA */
+        /* RESULTS */
         #resultContainer { margin-top: 25px; display: none; }
-        
-        /* Refresh Button Area */
         .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .refresh-btn {
             background: var(--text-primary); color: white; border: none; padding: 6px 12px;
             border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
             display: flex; align-items: center; gap: 5px;
         }
-        .refresh-btn:active { transform: scale(0.95); opacity: 0.8; }
-
+        
         .eta-card { 
             background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 12px; 
             border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.04);
@@ -96,6 +109,14 @@
     <header>
         <h2><div class="bus-icon">HK</div>Bus Tracker</h2>
     </header>
+
+    <div class="location-bar">
+        <div class="loc-label">📍 Enable Location Near</div>
+        <label class="switch">
+            <input type="checkbox" id="locationToggle">
+            <span class="slider"></span>
+        </label>
+    </div>
     
     <div class="control-group">
         <label>1. Company</label>
@@ -110,7 +131,7 @@
     </div>
 
     <div class="control-group">
-        <label>2. Route (Type or Scroll)</label>
+        <label>2. Route</label>
         <div class="select-wrapper">
             <input list="routeList" id="routeInput" placeholder="Select Company First..." disabled autocomplete="off" oninput="this.value = this.value.toUpperCase()">
             <datalist id="routeList"></datalist>
@@ -136,9 +157,7 @@
     <div id="resultContainer">
         <div class="result-header">
             <label style="margin:0">Live ETA</label>
-            <button class="refresh-btn" onclick="fetchETA()">
-                <span>↻ Refresh</span>
-            </button>
+            <button class="refresh-btn" onclick="fetchETA()"><span>↻ Refresh</span></button>
         </div>
         <div id="result"></div>
     </div>
@@ -146,6 +165,7 @@
 
 <script>
     const els = {
+        locToggle: document.getElementById('locationToggle'),
         company: document.getElementById('companySelect'),
         routeInput: document.getElementById('routeInput'),
         routeList: document.getElementById('routeList'),
@@ -156,16 +176,44 @@
     };
 
     let allRoutes = [];
-    let kmbStopMap = {}; 
-    let isRestoring = false; 
+    let kmbStopMap = {}; // Now stores { name: "Mong Kok", lat: 22.1, long: 114.1 }
+    let isRestoring = false;
+    let userLocation = null; // Stores { lat, long }
 
     // 1. Initialize
     (async function init() {
-        await fetchKMBStopNames(); 
+        await fetchKMBStopData(); 
         restoreHistory(); 
     })();
 
-    // --- EVENTS ---
+    // --- LOCATION LOGIC ---
+    els.locToggle.addEventListener('change', async (e) => {
+        if(e.target.checked) {
+            // Explain Why
+            const consent = confirm("We need your location to automatically select the nearest bus stop.\n\nClick OK to allow.");
+            if(consent) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
+                        // If stops are already loaded, trigger auto-select now
+                        if(!els.stop.disabled && els.stop.options.length > 1) {
+                            autoSelectNearestStop();
+                        }
+                    },
+                    (err) => {
+                        alert("Location permission denied. Feature disabled.");
+                        e.target.checked = false;
+                    }
+                );
+            } else {
+                e.target.checked = false;
+            }
+        } else {
+            userLocation = null;
+        }
+    });
+
+    // --- APP EVENTS ---
 
     els.company.addEventListener('change', async (e) => {
         if(!isRestoring) resetUI(2); 
@@ -173,13 +221,9 @@
     });
 
     els.routeInput.addEventListener('input', (e) => {
-        // Force Uppercase Logic for Robustness
         const routeNo = e.target.value.toUpperCase();
-        
-        // Only trigger "Load Directions" if the typed value matches a real route exactly
         if (allRoutes.some(r => r.route === routeNo)) {
             loadDirections(routeNo);
-            // Save history immediately when a valid route is typed
             if(!isRestoring) saveHistory();
         }
     });
@@ -194,33 +238,24 @@
         fetchETA();
     });
 
-    // --- LOGIC FUNCTIONS ---
+    // --- CORE LOGIC ---
 
     async function loadRoutes(company) {
         els.routeInput.placeholder = "Loading Routes...";
         els.routeInput.disabled = true;
-        
         try {
             const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
             const res = await fetch(url);
             const data = await res.json();
             allRoutes = data.data;
-            
             const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
-            
-            // Populate Datalist
             els.routeList.innerHTML = uniqueRoutes.map(r => `<option value="${r}">`).join('');
-            
             els.routeInput.placeholder = "Type route (e.g. 104)";
             els.routeInput.disabled = false;
 
-            // Restore Step 2 if needed
             if(isRestoring) {
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-                if(saved && saved.route) {
-                    els.routeInput.value = saved.route;
-                    loadDirections(saved.route);
-                }
+                if(saved && saved.route) { els.routeInput.value = saved.route; loadDirections(saved.route); }
             }
         } catch (e) { alert("Error loading routes"); }
     }
@@ -228,40 +263,27 @@
     function loadDirections(routeNo) {
         const company = els.company.value;
         let options = [];
-
         if (company === 'kmb') {
             const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
-            options = variants.map(v => ({
-                val: v.bound === 'I' ? 'inbound' : 'outbound',
-                txt: `To ${v.dest_en}` 
-            }));
+            options = variants.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
         } else {
             const r = allRoutes.find(x => x.route === routeNo);
-            if (r) {
-                options = [{ val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` }];
-            }
+            if (r) options = [{ val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` }];
         }
-
         const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
-        
         els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
         uniqueOptions.forEach(o => els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`);
         els.direction.disabled = false;
 
-        // Restore Step 3 if needed
         if(isRestoring) {
             const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-            if(saved && saved.direction) {
-                els.direction.value = saved.direction;
-                loadStops(saved.direction);
-            }
+            if(saved && saved.direction) { els.direction.value = saved.direction; loadStops(saved.direction); }
         }
     }
 
     async function loadStops(dir) {
         const company = els.company.value;
         const route = els.routeInput.value;
-        
         els.stop.innerHTML = '<option>Loading...</option>';
         
         try {
@@ -270,44 +292,80 @@
             const json = await res.json();
             
             let stops = [];
+            
             if (company === 'kmb') {
-                stops = json.data.map(s => ({ id: s.stop, seq: parseInt(s.seq), name: kmbStopMap[s.stop] || `Stop ${s.stop}` }));
+                // KMB: Use our smarter dictionary (Name + Lat/Long)
+                stops = json.data.map(s => {
+                    const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
+                    return { id: s.stop, seq: parseInt(s.seq), name: info.name, lat: info.lat, long: info.long };
+                });
             } else {
-                els.stop.innerHTML = '<option>Fetching Names...</option>';
+                // CITYBUS: API gives Lat/Long directly (yay!)
+                // Note: Citybus API structure puts lat/long in the stop list directly
                 const promises = json.data.map(async (s) => {
+                    // Citybus Stop List endpoint actually has lat/long!
+                    // Check if it's there, otherwise fetch name/details
+                    let name = s.stop;
+                    let lat = s.lat; 
+                    let long = s.long;
+
                     try {
                         const nr = await fetch(`/api/ctb/stop-name/${s.stop}`);
                         const nd = await nr.json();
-                        return { id: s.stop, seq: parseInt(s.seq), name: nd.data ? nd.data.name_en : s.stop };
-                    } catch { return { id: s.stop, seq: s.seq, name: s.stop }; }
+                        if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; }
+                    } catch {}
+                    return { id: s.stop, seq: parseInt(s.seq), name: name, lat: lat, long: long };
                 });
                 stops = await Promise.all(promises);
             }
             
             stops.sort((a,b) => a.seq - b.seq);
+            
+            // Store stops in DOM for the auto-selector to use later
+            els.stop.dataset.stopsData = JSON.stringify(stops);
+
             els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
             stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
             els.stop.disabled = false;
 
-            // Restore Step 4 if needed
-            if(isRestoring) {
-                const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-                if(saved && saved.stop) {
-                    els.stop.value = saved.stop;
-                    fetchETA();
-                    isRestoring = false; // Restore complete
-                }
-            } else {
-                saveHistory(); // Save progress as we go
+            // IF LOCATION IS ON: Auto Select Nearest
+            if(userLocation && !isRestoring) {
+                autoSelectNearestStop();
             }
 
-        } catch (e) { els.stop.innerHTML = '<option>Error</option>'; }
+            if(isRestoring) {
+                const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+                if(saved && saved.stop) { els.stop.value = saved.stop; fetchETA(); isRestoring = false; }
+            } else {
+                saveHistory();
+            }
+        } catch (e) { console.error(e); els.stop.innerHTML = '<option>Error</option>'; }
+    }
+
+    function autoSelectNearestStop() {
+        if(!userLocation || !els.stop.dataset.stopsData) return;
+        
+        const stops = JSON.parse(els.stop.dataset.stopsData);
+        let minInfo = { dist: 999999, id: null };
+
+        stops.forEach(s => {
+            if(s.lat && s.long) {
+                const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.long, s.lat, s.long);
+                if(d < minInfo.dist) { minInfo = { dist: d, id: s.id }; }
+            }
+        });
+
+        if(minInfo.id) {
+            els.stop.value = minInfo.id;
+            // Trigger visual update and fetch
+            fetchETA();
+            saveHistory();
+        }
     }
 
     async function fetchETA() {
         els.container.style.display = 'block';
         els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
-
         const company = els.company.value;
         const route = els.routeInput.value;
         const stopId = els.stop.value;
@@ -316,16 +374,12 @@
             let url = company === 'kmb' ? `/api/kmb/eta/${stopId}/${route}/1` : `/api/ctb/eta/${stopId}/${route}`;
             const res = await fetch(url);
             const json = await res.json();
-            
             const etas = json.data.filter(x => {
                 if(company === 'kmb') return x.route === route && x.dir === (els.direction.value === 'inbound' ? 'I' : 'O');
                 return x.route === route; 
             });
 
-            if (etas.length === 0) {
-                els.result.innerHTML = '<div class="loading-text">No upcoming buses found.</div>';
-                return;
-            }
+            if (etas.length === 0) { els.result.innerHTML = '<div class="loading-text">No upcoming buses found.</div>'; return; }
 
             let html = '';
             etas.slice(0, 3).forEach(bus => {
@@ -341,37 +395,39 @@
                     </div>`;
             });
             els.result.innerHTML = html;
-
         } catch (e) { els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>'; }
     }
 
-    // --- HISTORY HELPERS ---
+    // --- UTILS ---
+    async function fetchKMBStopData() {
+        try { 
+            const r = await fetch('/api/kmb/stop-names'); 
+            const j = await r.json(); 
+            // Store coordinates as well!
+            j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
+        } catch {}
+    }
+
+    // Haversine Formula (GPS Distance)
+    function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
+        var R = 6371; // Radius of earth in km
+        var dLat = deg2rad(lat2-lat1);  
+        var dLon = deg2rad(lon2-lon1); 
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        var d = R * c; 
+        return d;
+    }
+    function deg2rad(deg) { return deg * (Math.PI/180); }
 
     function saveHistory() {
-        // Only save if we have valid data
         if(!els.company.value) return;
-
-        const data = {
-            company: els.company.value,
-            route: els.routeInput.value,
-            direction: els.direction.value,
-            stop: els.stop.value
-        };
+        const data = { company: els.company.value, route: els.routeInput.value, direction: els.direction.value, stop: els.stop.value };
         localStorage.setItem('hkBusHistory', JSON.stringify(data));
     }
-
     function restoreHistory() {
         const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-        if (saved && saved.company) {
-            isRestoring = true; 
-            els.company.value = saved.company;
-            loadRoutes(saved.company); // This triggers the chain
-        }
-    }
-
-    // --- UTILS ---
-    async function fetchKMBStopNames() {
-        try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = s.name_en); } catch {}
+        if (saved && saved.company) { isRestoring = true; els.company.value = saved.company; loadRoutes(saved.company); }
     }
     function resetUI(level) {
         if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; }
