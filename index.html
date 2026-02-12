@@ -60,6 +60,9 @@
         select:focus, input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 4px var(--border); }
         select:disabled, input:disabled { background-color: #f5f5f5; color: #999; cursor: not-allowed; border-color: transparent; box-shadow: none; }
 
+        /* FORCE UPPERCASE INPUT */
+        #routeInput { text-transform: uppercase; }
+
         /* RESULT AREA */
         #resultContainer { margin-top: 25px; display: none; }
         
@@ -107,9 +110,9 @@
     </div>
 
     <div class="control-group">
-        <label>2. Route</label>
+        <label>2. Route (Type or Scroll)</label>
         <div class="select-wrapper">
-            <input list="routeList" id="routeInput" placeholder="Select Company First..." disabled autocomplete="off">
+            <input list="routeList" id="routeInput" placeholder="Select Company First..." disabled autocomplete="off" oninput="this.value = this.value.toUpperCase()">
             <datalist id="routeList"></datalist>
         </div>
     </div>
@@ -154,25 +157,30 @@
 
     let allRoutes = [];
     let kmbStopMap = {}; 
-    let isRestoring = false; // Flag to prevent triggering events during restore
+    let isRestoring = false; 
 
     // 1. Initialize
     (async function init() {
-        await fetchKMBStopNames(); // Load Dictionary
-        restoreHistory(); // Check if user has saved data
+        await fetchKMBStopNames(); 
+        restoreHistory(); 
     })();
 
     // --- EVENTS ---
 
     els.company.addEventListener('change', async (e) => {
-        if(!isRestoring) resetUI(2); // Only reset if user manually changed it
+        if(!isRestoring) resetUI(2); 
         await loadRoutes(e.target.value);
     });
 
     els.routeInput.addEventListener('input', (e) => {
+        // Force Uppercase Logic for Robustness
         const routeNo = e.target.value.toUpperCase();
+        
+        // Only trigger "Load Directions" if the typed value matches a real route exactly
         if (allRoutes.some(r => r.route === routeNo)) {
             loadDirections(routeNo);
+            // Save history immediately when a valid route is typed
+            if(!isRestoring) saveHistory();
         }
     });
 
@@ -182,7 +190,7 @@
     });
 
     els.stop.addEventListener('change', () => {
-        saveHistory(); // Save selection when stop is picked
+        saveHistory(); 
         fetchETA();
     });
 
@@ -199,6 +207,8 @@
             allRoutes = data.data;
             
             const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
+            
+            // Populate Datalist
             els.routeList.innerHTML = uniqueRoutes.map(r => `<option value="${r}">`).join('');
             
             els.routeInput.placeholder = "Type route (e.g. 104)";
@@ -287,6 +297,8 @@
                     fetchETA();
                     isRestoring = false; // Restore complete
                 }
+            } else {
+                saveHistory(); // Save progress as we go
             }
 
         } catch (e) { els.stop.innerHTML = '<option>Error</option>'; }
@@ -336,6 +348,9 @@
     // --- HISTORY HELPERS ---
 
     function saveHistory() {
+        // Only save if we have valid data
+        if(!els.company.value) return;
+
         const data = {
             company: els.company.value,
             route: els.routeInput.value,
@@ -348,10 +363,9 @@
     function restoreHistory() {
         const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
         if (saved && saved.company) {
-            isRestoring = true; // Block UI resets during restoration
+            isRestoring = true; 
             els.company.value = saved.company;
-            // Trigger the chain reaction manually
-            loadRoutes(saved.company);
+            loadRoutes(saved.company); // This triggers the chain
         }
     }
 
