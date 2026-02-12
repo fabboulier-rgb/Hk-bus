@@ -34,21 +34,15 @@
             justify-content: center;
         }
 
-        main {
-            width: 100%;
-            max-width: 480px;
-        }
+        main { width: 100%; max-width: 480px; }
 
-        header { margin-bottom: 30px; text-align: center; }
+        header { margin-bottom: 20px; text-align: center; }
         h2 { font-weight: 700; font-size: 24px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
 
-        .control-group { margin-bottom: 20px; position: relative; }
-        label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .control-group { margin-bottom: 15px; position: relative; }
+        label { display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
         
-        /* Select & Input Styling */
         .select-wrapper { position: relative; }
-        
-        /* Only add arrow to Select elements, not Input */
         .select-wrapper select + .arrow {
              position: absolute; right: 16px; top: 50%; transform: translateY(-50%); width: 10px; height: 6px; 
              background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23666666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -56,7 +50,7 @@
         }
 
         select, input { 
-            width: 100%; padding: 14px 16px; font-size: 15px; font-family: var(--font-stack);
+            width: 100%; padding: 12px 16px; font-size: 16px; font-family: var(--font-stack);
             color: var(--text-primary); background-color: var(--surface);
             border: 1px solid var(--border); border-radius: var(--radius);
             appearance: none; outline: none; transition: all 0.15s ease;
@@ -66,9 +60,17 @@
         select:focus, input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 4px var(--border); }
         select:disabled, input:disabled { background-color: #f5f5f5; color: #999; cursor: not-allowed; border-color: transparent; box-shadow: none; }
 
-        /* ETA Results */
-        #result { margin-top: 30px; display: none; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* RESULT AREA */
+        #resultContainer { margin-top: 25px; display: none; }
+        
+        /* Refresh Button Area */
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .refresh-btn {
+            background: var(--text-primary); color: white; border: none; padding: 6px 12px;
+            border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .refresh-btn:active { transform: scale(0.95); opacity: 0.8; }
 
         .eta-card { 
             background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 12px; 
@@ -93,7 +95,7 @@
     </header>
     
     <div class="control-group">
-        <label>1. Bus Company</label>
+        <label>1. Company</label>
         <div class="select-wrapper">
             <select id="companySelect">
                 <option value="" disabled selected>Select Company</option>
@@ -105,20 +107,17 @@
     </div>
 
     <div class="control-group">
-        <label>2. Route (Type or Scroll)</label>
+        <label>2. Route</label>
         <div class="select-wrapper">
             <input list="routeList" id="routeInput" placeholder="Select Company First..." disabled autocomplete="off">
-            <datalist id="routeList">
-                </datalist>
+            <datalist id="routeList"></datalist>
         </div>
     </div>
 
     <div class="control-group">
         <label>3. Direction</label>
         <div class="select-wrapper">
-            <select id="directionSelect" disabled>
-                <option>Select...</option>
-            </select>
+            <select id="directionSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
     </div>
@@ -126,86 +125,98 @@
     <div class="control-group">
         <label>4. Bus Stop</label>
         <div class="select-wrapper">
-            <select id="stopSelect" disabled>
-                <option>Select...</option>
-            </select>
+            <select id="stopSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
     </div>
 
-    <div id="result"></div>
+    <div id="resultContainer">
+        <div class="result-header">
+            <label style="margin:0">Live ETA</label>
+            <button class="refresh-btn" onclick="fetchETA()">
+                <span>↻ Refresh</span>
+            </button>
+        </div>
+        <div id="result"></div>
+    </div>
 </main>
 
 <script>
     const els = {
         company: document.getElementById('companySelect'),
-        routeInput: document.getElementById('routeInput'), // Changed to Input
-        routeList: document.getElementById('routeList'),   // New Datalist
+        routeInput: document.getElementById('routeInput'),
+        routeList: document.getElementById('routeList'),
         direction: document.getElementById('directionSelect'),
         stop: document.getElementById('stopSelect'),
+        container: document.getElementById('resultContainer'),
         result: document.getElementById('result')
     };
 
     let allRoutes = [];
     let kmbStopMap = {}; 
+    let isRestoring = false; // Flag to prevent triggering events during restore
 
-    // Load Dictionary
-    fetchKMBStopNames();
+    // 1. Initialize
+    (async function init() {
+        await fetchKMBStopNames(); // Load Dictionary
+        restoreHistory(); // Check if user has saved data
+    })();
 
-    // --- 1. COMPANY CHANGED ---
+    // --- EVENTS ---
+
     els.company.addEventListener('change', async (e) => {
-        const company = e.target.value;
-        
-        // Reset Steps 2, 3, 4
-        els.routeInput.value = '';
-        els.routeInput.disabled = true;
-        els.routeInput.placeholder = "Loading Routes...";
-        resetSelect(els.direction);
-        resetSelect(els.stop);
-        els.result.style.display = 'none';
+        if(!isRestoring) resetUI(2); // Only reset if user manually changed it
+        await loadRoutes(e.target.value);
+    });
 
+    els.routeInput.addEventListener('input', (e) => {
+        const routeNo = e.target.value.toUpperCase();
+        if (allRoutes.some(r => r.route === routeNo)) {
+            loadDirections(routeNo);
+        }
+    });
+
+    els.direction.addEventListener('change', async (e) => {
+        if(!isRestoring) resetUI(4);
+        await loadStops(e.target.value);
+    });
+
+    els.stop.addEventListener('change', () => {
+        saveHistory(); // Save selection when stop is picked
+        fetchETA();
+    });
+
+    // --- LOGIC FUNCTIONS ---
+
+    async function loadRoutes(company) {
+        els.routeInput.placeholder = "Loading Routes...";
+        els.routeInput.disabled = true;
+        
         try {
             const url = company === 'kmb' ? '/api/kmb/route' : '/api/ctb/route';
             const res = await fetch(url);
             const data = await res.json();
             allRoutes = data.data;
+            
             const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
+            els.routeList.innerHTML = uniqueRoutes.map(r => `<option value="${r}">`).join('');
             
-            // Populate Datalist instead of Select
-            els.routeList.innerHTML = '';
-            uniqueRoutes.forEach(r => {
-                els.routeList.innerHTML += `<option value="${r}">`;
-            });
-            
-            els.routeInput.placeholder = "Type route (e.g., 104)";
+            els.routeInput.placeholder = "Type route (e.g. 104)";
             els.routeInput.disabled = false;
-            els.routeInput.focus();
 
-        } catch (err) { alert("Error loading routes."); }
-    });
+            // Restore Step 2 if needed
+            if(isRestoring) {
+                const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+                if(saved && saved.route) {
+                    els.routeInput.value = saved.route;
+                    loadDirections(saved.route);
+                }
+            }
+        } catch (e) { alert("Error loading routes"); }
+    }
 
-    // --- 2. ROUTE CHANGED (INPUT EVENT) ---
-    // We listen for 'input' to detect typing, but we only trigger next step if it matches a valid route
-    els.routeInput.addEventListener('input', (e) => {
-        const routeNo = e.target.value.toUpperCase(); // Force uppercase match
+    function loadDirections(routeNo) {
         const company = els.company.value;
-        
-        // Check if the typed value exists in our route list
-        const isValidRoute = allRoutes.some(r => r.route === routeNo);
-
-        if (!isValidRoute) {
-            // If route isn't valid yet, disable next steps
-            resetSelect(els.direction);
-            resetSelect(els.stop);
-            els.result.style.display = 'none';
-            return;
-        }
-
-        // Valid Route Found -> Trigger Logic
-        resetSelect(els.direction);
-        resetSelect(els.stop);
-        els.result.style.display = 'none';
-        
         let options = [];
 
         if (company === 'kmb') {
@@ -217,90 +228,80 @@
         } else {
             const r = allRoutes.find(x => x.route === routeNo);
             if (r) {
-                options = [
-                    { val: 'outbound', txt: `To ${r.dest_en}` },
-                    { val: 'inbound', txt: `To ${r.orig_en}` }
-                ];
+                options = [{ val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` }];
             }
         }
-        
+
         const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
         
         els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
-        uniqueOptions.forEach(o => {
-            els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`;
-        });
+        uniqueOptions.forEach(o => els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`);
         els.direction.disabled = false;
-    });
 
-    // --- 3. DIRECTION CHANGED ---
-    els.direction.addEventListener('change', async (e) => {
-        const dir = e.target.value;
-        const route = els.routeInput.value; // Get value from Input
+        // Restore Step 3 if needed
+        if(isRestoring) {
+            const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+            if(saved && saved.direction) {
+                els.direction.value = saved.direction;
+                loadStops(saved.direction);
+            }
+        }
+    }
+
+    async function loadStops(dir) {
         const company = els.company.value;
-
-        resetSelect(els.stop);
-        els.stop.innerHTML = '<option>Loading Stops...</option>';
-
+        const route = els.routeInput.value;
+        
+        els.stop.innerHTML = '<option>Loading...</option>';
+        
         try {
-            let url;
-            if (company === 'kmb') url = `/api/kmb/stops/${route}/${dir}/1`;
-            else url = `/api/ctb/stops/${route}/${dir}`;
-
+            let url = company === 'kmb' ? `/api/kmb/stops/${route}/${dir}/1` : `/api/ctb/stops/${route}/${dir}`;
             const res = await fetch(url);
             const json = await res.json();
             
-            let stopsWithNames = [];
-            
+            let stops = [];
             if (company === 'kmb') {
-                stopsWithNames = json.data.map(s => ({
-                    id: s.stop,
-                    seq: parseInt(s.seq),
-                    name: kmbStopMap[s.stop] || `Stop ${s.stop}`
-                }));
+                stops = json.data.map(s => ({ id: s.stop, seq: parseInt(s.seq), name: kmbStopMap[s.stop] || `Stop ${s.stop}` }));
             } else {
-                els.stop.innerHTML = '<option>Fetching Stop Names...</option>';
-                const nameRequests = json.data.map(async (s) => {
+                els.stop.innerHTML = '<option>Fetching Names...</option>';
+                const promises = json.data.map(async (s) => {
                     try {
-                        const nameRes = await fetch(`/api/ctb/stop-name/${s.stop}`);
-                        const nameData = await nameRes.json();
-                        return {
-                            id: s.stop,
-                            seq: parseInt(s.seq),
-                            name: nameData.data ? nameData.data.name_en : `Stop ${s.stop}`
-                        };
-                    } catch (err) {
-                        return { id: s.stop, seq: parseInt(s.seq), name: `Stop ${s.stop}` };
-                    }
+                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`);
+                        const nd = await nr.json();
+                        return { id: s.stop, seq: parseInt(s.seq), name: nd.data ? nd.data.name_en : s.stop };
+                    } catch { return { id: s.stop, seq: s.seq, name: s.stop }; }
                 });
-                stopsWithNames = await Promise.all(nameRequests);
+                stops = await Promise.all(promises);
             }
             
-            stopsWithNames.sort((a,b) => a.seq - b.seq);
-
+            stops.sort((a,b) => a.seq - b.seq);
             els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
-            stopsWithNames.forEach(s => {
-                els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`;
-            });
+            stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
             els.stop.disabled = false;
 
-        } catch (err) { els.stop.innerHTML = '<option>Error loading stops</option>'; }
-    });
+            // Restore Step 4 if needed
+            if(isRestoring) {
+                const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+                if(saved && saved.stop) {
+                    els.stop.value = saved.stop;
+                    fetchETA();
+                    isRestoring = false; // Restore complete
+                }
+            }
 
-    // --- 4. STOP CHANGED ---
-    els.stop.addEventListener('change', async (e) => {
-        const stopId = e.target.value;
-        const route = els.routeInput.value; // Get value from Input
-        const company = els.company.value;
-        
-        els.result.style.display = 'block';
+        } catch (e) { els.stop.innerHTML = '<option>Error</option>'; }
+    }
+
+    async function fetchETA() {
+        els.container.style.display = 'block';
         els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
 
-        try {
-            let url;
-            if (company === 'kmb') url = `/api/kmb/eta/${stopId}/${route}/1`;
-            else url = `/api/ctb/eta/${stopId}/${route}`;
+        const company = els.company.value;
+        const route = els.routeInput.value;
+        const stopId = els.stop.value;
 
+        try {
+            let url = company === 'kmb' ? `/api/kmb/eta/${stopId}/${route}/1` : `/api/ctb/eta/${stopId}/${route}`;
             const res = await fetch(url);
             const json = await res.json();
             
@@ -323,32 +324,46 @@
                 }
                 html += `
                     <div class="eta-card">
-                            <div class="eta-info">
-                            <span class="eta-dest">To ${bus.dest_en}</span>
-                            <span class="eta-desc">${company.toUpperCase()}</span>
-                        </div>
+                        <div class="eta-info"><span class="eta-dest">To ${bus.dest_en}</span><span class="eta-desc">${company.toUpperCase()}</span></div>
                         <span class="eta-time">${timeDisplay}</span>
                     </div>`;
             });
             els.result.innerHTML = html;
 
-        } catch (err) {
-            els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>';
-        }
-    });
-
-    // --- HELPERS ---
-    async function fetchKMBStopNames() {
-        try {
-            const res = await fetch('/api/kmb/stop-names');
-            const json = await res.json();
-            json.data.forEach(s => { kmbStopMap[s.stop] = s.name_en; });
-        } catch (e) {}
+        } catch (e) { els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>'; }
     }
-    function resetSelect(el) {
-        el.innerHTML = '<option>Select...</option>';
-        el.disabled = true;
-        el.value = "";
+
+    // --- HISTORY HELPERS ---
+
+    function saveHistory() {
+        const data = {
+            company: els.company.value,
+            route: els.routeInput.value,
+            direction: els.direction.value,
+            stop: els.stop.value
+        };
+        localStorage.setItem('hkBusHistory', JSON.stringify(data));
+    }
+
+    function restoreHistory() {
+        const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+        if (saved && saved.company) {
+            isRestoring = true; // Block UI resets during restoration
+            els.company.value = saved.company;
+            // Trigger the chain reaction manually
+            loadRoutes(saved.company);
+        }
+    }
+
+    // --- UTILS ---
+    async function fetchKMBStopNames() {
+        try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = s.name_en); } catch {}
+    }
+    function resetUI(level) {
+        if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; }
+        if(level <= 3) { els.direction.innerHTML = '<option>Select...</option>'; els.direction.disabled = true; }
+        if(level <= 4) { els.stop.innerHTML = '<option>Select...</option>'; els.stop.disabled = true; }
+        els.container.style.display = 'none';
     }
     const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 </script>
