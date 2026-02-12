@@ -39,7 +39,7 @@
         header { margin-bottom: 20px; text-align: center; }
         h2 { font-weight: 700; font-size: 24px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
 
-        /* LOCATION TOGGLE */
+        /* LOCATION BAR */
         .location-bar {
             background: white; padding: 10px 15px; border-radius: 99px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;
@@ -48,6 +48,17 @@
         }
         .loc-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
         
+        .loc-controls { display: flex; align-items: center; gap: 10px; }
+
+        /* GPS Refresh Button */
+        .gps-refresh {
+            background: none; border: none; font-size: 16px; cursor: pointer;
+            width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; background: #f0f0f0; color: #666;
+            display: none; /* Hidden by default until toggle is ON */
+        }
+        .gps-refresh:active { background: #e0e0e0; transform: scale(0.9); }
+
         /* The Switch Box */
         .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
         .switch input { opacity: 0; width: 0; height: 0; }
@@ -111,11 +122,14 @@
     </header>
 
     <div class="location-bar">
-        <div class="loc-label">📍 Enable Location Near</div>
-        <label class="switch">
-            <input type="checkbox" id="locationToggle">
-            <span class="slider"></span>
-        </label>
+        <div class="loc-label">📍 Find Nearest Stop</div>
+        <div class="loc-controls">
+            <button id="gpsRefreshBtn" class="gps-refresh" onclick="updateLocation()">⟳</button>
+            <label class="switch">
+                <input type="checkbox" id="locationToggle">
+                <span class="slider"></span>
+            </label>
+        </div>
     </div>
     
     <div class="control-group">
@@ -166,6 +180,7 @@
 <script>
     const els = {
         locToggle: document.getElementById('locationToggle'),
+        gpsBtn: document.getElementById('gpsRefreshBtn'),
         company: document.getElementById('companySelect'),
         routeInput: document.getElementById('routeInput'),
         routeList: document.getElementById('routeList'),
@@ -176,9 +191,9 @@
     };
 
     let allRoutes = [];
-    let kmbStopMap = {}; // Now stores { name: "Mong Kok", lat: 22.1, long: 114.1 }
+    let kmbStopMap = {}; 
     let isRestoring = false;
-    let userLocation = null; // Stores { lat, long }
+    let userLocation = null; 
 
     // 1. Initialize
     (async function init() {
@@ -189,29 +204,41 @@
     // --- LOCATION LOGIC ---
     els.locToggle.addEventListener('change', async (e) => {
         if(e.target.checked) {
-            // Explain Why
             const consent = confirm("We need your location to automatically select the nearest bus stop.\n\nClick OK to allow.");
             if(consent) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
-                        // If stops are already loaded, trigger auto-select now
-                        if(!els.stop.disabled && els.stop.options.length > 1) {
-                            autoSelectNearestStop();
-                        }
-                    },
-                    (err) => {
-                        alert("Location permission denied. Feature disabled.");
-                        e.target.checked = false;
-                    }
-                );
+                updateLocation(); // Trigger Location Fetch
             } else {
                 e.target.checked = false;
             }
         } else {
             userLocation = null;
+            els.gpsBtn.style.display = 'none'; // Hide refresh btn
         }
     });
+
+    function updateLocation() {
+        // Show loading state on button
+        els.gpsBtn.style.display = 'flex';
+        els.gpsBtn.innerText = '...';
+        
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
+                els.gpsBtn.innerText = '⟳'; // Restore Icon
+                
+                // If stops are already loaded, re-calculate nearest
+                if(!els.stop.disabled && els.stop.options.length > 1) {
+                    autoSelectNearestStop();
+                }
+            },
+            (err) => {
+                alert("Location permission denied or GPS error.");
+                els.locToggle.checked = false;
+                els.gpsBtn.style.display = 'none';
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+    }
 
     // --- APP EVENTS ---
 
@@ -294,21 +321,13 @@
             let stops = [];
             
             if (company === 'kmb') {
-                // KMB: Use our smarter dictionary (Name + Lat/Long)
                 stops = json.data.map(s => {
                     const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
                     return { id: s.stop, seq: parseInt(s.seq), name: info.name, lat: info.lat, long: info.long };
                 });
             } else {
-                // CITYBUS: API gives Lat/Long directly (yay!)
-                // Note: Citybus API structure puts lat/long in the stop list directly
                 const promises = json.data.map(async (s) => {
-                    // Citybus Stop List endpoint actually has lat/long!
-                    // Check if it's there, otherwise fetch name/details
-                    let name = s.stop;
-                    let lat = s.lat; 
-                    let long = s.long;
-
+                    let name = s.stop; let lat = s.lat; let long = s.long;
                     try {
                         const nr = await fetch(`/api/ctb/stop-name/${s.stop}`);
                         const nd = await nr.json();
@@ -320,15 +339,11 @@
             }
             
             stops.sort((a,b) => a.seq - b.seq);
-            
-            // Store stops in DOM for the auto-selector to use later
             els.stop.dataset.stopsData = JSON.stringify(stops);
-
             els.stop.innerHTML = '<option value="" disabled selected>Select Bus Stop</option>';
             stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
             els.stop.disabled = false;
 
-            // IF LOCATION IS ON: Auto Select Nearest
             if(userLocation && !isRestoring) {
                 autoSelectNearestStop();
             }
@@ -357,7 +372,6 @@
 
         if(minInfo.id) {
             els.stop.value = minInfo.id;
-            // Trigger visual update and fetch
             fetchETA();
             saveHistory();
         }
@@ -403,12 +417,10 @@
         try { 
             const r = await fetch('/api/kmb/stop-names'); 
             const j = await r.json(); 
-            // Store coordinates as well!
             j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
         } catch {}
     }
 
-    // Haversine Formula (GPS Distance)
     function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
         var R = 6371; // Radius of earth in km
         var dLat = deg2rad(lat2-lat1);  
