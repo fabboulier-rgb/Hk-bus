@@ -6,7 +6,6 @@
     <title>HK Transit Tracker</title>
     
     <link rel="manifest" href="/manifest.json">
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,15 +15,26 @@
             --bg: #fafafa; --surface: #ffffff; --border: #eaeaea;
             --text-primary: #111111; --text-secondary: #666666;
             --accent: #0070f3; --accent-glow: rgba(0, 112, 243, 0.1);
-            --mtr-red: #D90036; 
+            --mtr-red: #D90036; --fav-gold: #F5A623;
             --radius: 8px; --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
         * { box-sizing: border-box; }
         body { font-family: var(--font-stack); background: var(--bg); color: var(--text-primary); margin: 0; padding: 20px; -webkit-font-smoothing: antialiased; display: flex; justify-content: center; }
-        main { width: 100%; max-width: 480px; }
+        main { width: 100%; max-width: 480px; padding-bottom: 40px;}
         header { margin-bottom: 20px; text-align: center; }
         h2 { font-weight: 700; font-size: 24px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+        /* FAVORITES ROW */
+        .fav-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 15px; margin-bottom: 5px; scrollbar-width: none; }
+        .fav-row::-webkit-scrollbar { display: none; }
+        .fav-card { flex: 0 0 auto; background: var(--surface); border: 1px solid var(--border); padding: 10px 14px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 12px; cursor: pointer; transition: transform 0.1s; }
+        .fav-card:active { transform: scale(0.96); }
+        .fav-info { display: flex; flex-direction: column; gap: 2px;}
+        .fav-route { font-weight: 700; font-size: 14px; color: var(--text-primary); display: flex; align-items: center; gap: 4px; }
+        .fav-stop { font-size: 11px; color: var(--text-secondary); max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fav-del { background: none; border: none; color: #ccc; font-size: 18px; padding: 0 0 0 5px; cursor: pointer; }
+        .fav-del:active { color: var(--mtr-red); }
 
         /* LOCATION BAR */
         .location-bar { background: white; padding: 10px 15px; border-radius: 99px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); }
@@ -56,7 +66,11 @@
         /* RESULTS */
         #resultContainer { margin-top: 25px; display: none; }
         .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .refresh-btn { background: var(--text-primary); color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .btn-group { display: flex; gap: 8px; }
+        
+        .action-btn { background: var(--text-primary); color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .action-btn:active { transform: scale(0.95); opacity: 0.8; }
+        .btn-save { background: rgba(245, 166, 35, 0.1); color: var(--fav-gold); border: 1px solid rgba(245, 166, 35, 0.3); }
         
         .eta-card { background: var(--surface); padding: 20px; border-radius: 12px; margin-bottom: 12px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.04); display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; border-left: 5px solid var(--accent); }
         .eta-card.mtr-card { border-left-color: var(--mtr-red); }
@@ -69,6 +83,11 @@
         
         .loading-text { text-align: center; color: var(--text-secondary); font-size: 14px; padding: 20px; font-weight: 500; }
         .transit-icon { width: 24px; height: 24px; background: #111; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+
+        /* BUY ME A COFFEE */
+        .bmc-container { margin-top: 40px; text-align: center; padding-top: 20px; border-top: 1px solid var(--border); }
+        .bmc-btn { display: inline-flex; align-items: center; gap: 8px; background-color: #FFDD00; color: #000000; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 99px; text-decoration: none; box-shadow: 0 4px 10px rgba(255, 221, 0, 0.3); transition: transform 0.2s; }
+        .bmc-btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -77,6 +96,8 @@
     <header>
         <h2><div class="transit-icon">HK</div>Transit Tracker</h2>
     </header>
+
+    <div id="favRow" class="fav-row" style="display: none;"></div>
 
     <div class="location-bar">
         <div class="loc-label">📍 Find Nearest Stop</div>
@@ -129,14 +150,23 @@
     <div id="resultContainer">
         <div class="result-header">
             <label style="margin:0">Live ETA</label>
-            <button class="refresh-btn" onclick="fetchETA()"><span>↻ Refresh</span></button>
+            <div class="btn-group">
+                <button id="saveFavBtn" class="action-btn btn-save" onclick="saveFavorite()" style="display:none;">⭐ Save</button>
+                <button class="action-btn" onclick="fetchETA()"><span>↻ Refresh</span></button>
+            </div>
         </div>
         <div id="result"></div>
+    </div>
+
+    <div class="bmc-container">
+        <a href="https://www.buymeacoffee.com/YOUR_USERNAME" target="_blank" class="bmc-btn">
+            ☕ Buy me a coffee
+        </a>
+        <div style="font-size: 11px; color: #999; margin-top: 10px;">Ad-free forever.</div>
     </div>
 </main>
 
 <script>
-    // --- MTR DICTIONARY ---
     const MTR_DATA = {
         'TWL': { n: 'Tsuen Wan Line', d: {UP:'Tsuen Wan', DOWN:'Central'}, s: "CEN,Central,22.2818,114.1582|ADM,Admiralty,22.2795,114.1645|TST,Tsim Sha Tsui,22.2976,114.1722|JOR,Jordan,22.3049,114.1717|YMT,Yau Ma Tei,22.3130,114.1706|MOK,Mong Kok,22.3192,114.1698|PRE,Prince Edward,22.3246,114.1683|SSP,Sham Shui Po,22.3307,114.1622|CSW,Cheung Sha Wan,22.3371,114.1553|LCK,Lai Chi Kok,22.3369,114.1483|MEF,Mei Foo,22.3334,114.1396|LAK,Lai King,22.3483,114.1271|KWF,Kwai Fong,22.3564,114.1279|KWH,Kwai Hing,22.3633,114.1315|TWH,Tai Wo Hau,22.3705,114.1235|TSW,Tsuen Wan,22.3739,114.1186" },
         'ISL': { n: 'Island Line', d: {UP:'Chai Wan', DOWN:'Kennedy Town'}, s: "KET,Kennedy Town,22.2815,114.1277|HKU,HKU,22.2838,114.1352|SYP,Sai Ying Pun,22.2865,114.1422|SHW,Sheung Wan,22.2872,114.1523|CEN,Central,22.2818,114.1582|ADM,Admiralty,22.2795,114.1645|WAC,Wan Chai,22.2778,114.1731|CAB,Causeway Bay,22.2803,114.1852|TIH,Tin Hau,22.2825,114.1917|FOH,Fortress Hill,22.2882,114.1939|NOP,North Point,22.2921,114.2007|QUB,Quarry Bay,22.2885,114.2112|TAK,Tai Koo,22.2847,114.2168|SWH,Sai Wan Ho,22.2822,114.2219|SKW,Shau Kei Wan,22.2783,114.2294|HFC,Heng Fa Chuen,22.2773,114.2396|CHW,Chai Wan,22.2646,114.2374" },
@@ -149,13 +179,9 @@
         'AEL': { n: 'Airport Express', d: {UP:'AsiaWorld-Expo', DOWN:'Hong Kong'}, s: "HOK,Hong Kong,22.2847,114.1581|KOW,Kowloon,22.3043,114.1615|TSY,Tsing Yi,22.3584,114.1069|AIR,Airport,22.3155,113.9366|AWE,AsiaWorld-Expo,22.3211,113.9436" }
     };
 
-    // Create a reverse lookup dictionary so we know "LHP" means "LOHAS Park" dynamically
     let mtrStationMap = {};
     Object.values(MTR_DATA).forEach(line => {
-        line.s.split('|').forEach(station => {
-            const parts = station.split(',');
-            mtrStationMap[parts[0]] = parts[1]; // e.g. mtrStationMap['LHP'] = 'LOHAS Park'
-        });
+        line.s.split('|').forEach(station => { mtrStationMap[station.split(',')[0]] = station.split(',')[1]; });
     });
 
     const els = {
@@ -163,16 +189,86 @@
         company: document.getElementById('companySelect'), routeInput: document.getElementById('routeInput'),
         routeList: document.getElementById('routeList'), direction: document.getElementById('directionSelect'),
         stop: document.getElementById('stopSelect'), container: document.getElementById('resultContainer'),
-        result: document.getElementById('result'), lblRoute: document.getElementById('lbl-route'), lblStop: document.getElementById('lbl-stop')
+        result: document.getElementById('result'), lblRoute: document.getElementById('lbl-route'), lblStop: document.getElementById('lbl-stop'),
+        favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn')
     };
 
     let allRoutes = []; let kmbStopMap = {}; let isRestoring = false; let userLocation = null; 
+    let favorites = JSON.parse(localStorage.getItem('hkBusFavs')) || [];
 
     // 1. Initialize
     (async function init() {
+        renderFavorites();
         await fetchKMBStopData(); 
         restoreHistory(); 
     })();
+
+    // --- FAVORITES LOGIC ---
+    function renderFavorites() {
+        if (favorites.length === 0) {
+            els.favRow.style.display = 'none';
+            return;
+        }
+        els.favRow.style.display = 'flex';
+        els.favRow.innerHTML = favorites.map((fav, index) => `
+            <div class="fav-card" onclick="loadFavorite(${index})">
+                <div class="fav-info">
+                    <span class="fav-route">${fav.company.toUpperCase()} ${fav.route}</span>
+                    <span class="fav-stop">${fav.stopName}</span>
+                </div>
+                <button class="fav-del" onclick="event.stopPropagation(); deleteFavorite(${index})">×</button>
+            </div>
+        `).join('');
+        checkCurrentIsFavorite();
+    }
+
+    function saveFavorite() {
+        const company = els.company.value;
+        const route = els.routeInput.value;
+        const direction = els.direction.value;
+        const stop = els.stop.value;
+        const stopName = els.stop.options[els.stop.selectedIndex].text.replace(/^\d+\.\s/, ''); // Remove the "1. " sequence prefix
+
+        const newFav = { company, route, direction, stop, stopName };
+        favorites.push(newFav);
+        localStorage.setItem('hkBusFavs', JSON.stringify(favorites));
+        renderFavorites();
+    }
+
+    function deleteFavorite(index) {
+        favorites.splice(index, 1);
+        localStorage.setItem('hkBusFavs', JSON.stringify(favorites));
+        renderFavorites();
+    }
+
+    async function loadFavorite(index) {
+        const fav = favorites[index];
+        isRestoring = true; // Prevent GPS from overriding the favorite
+        
+        els.company.value = fav.company;
+        els.company.dispatchEvent(new Event('change')); // Update labels
+        await loadRoutes(fav.company);
+        
+        els.routeInput.value = fav.route;
+        loadDirections(fav.route);
+        
+        els.direction.value = fav.direction;
+        await loadStops(fav.direction);
+        
+        els.stop.value = fav.stop;
+        
+        isRestoring = false;
+        fetchETA();
+        saveHistory();
+    }
+
+    function checkCurrentIsFavorite() {
+        const c = els.company.value; const r = els.routeInput.value;
+        const d = els.direction.value; const s = els.stop.value;
+        
+        const isFav = favorites.some(f => f.company === c && f.route === r && f.direction === d && f.stop === s);
+        els.saveFavBtn.style.display = (c && r && d && s && !isFav) ? 'flex' : 'none';
+    }
 
     // --- LOCATION LOGIC ---
     els.locToggle.addEventListener('change', async (e) => {
@@ -190,7 +286,7 @@
             (pos) => {
                 userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
                 els.gpsBtn.innerText = '⟳'; 
-                if(!els.stop.disabled && els.stop.options.length > 1) { autoSelectNearestStop(); }
+                if(!els.stop.disabled && els.stop.options.length > 1 && !isRestoring) { autoSelectNearestStop(); }
             },
             (err) => { alert("Location permission denied or GPS error."); els.locToggle.checked = false; els.gpsBtn.style.display = 'none'; },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
@@ -202,7 +298,6 @@
         const comp = e.target.value;
         els.lblRoute.innerText = comp === 'mtr' ? '2. Line (Type or Scroll)' : '2. Route (Type or Scroll)';
         els.lblStop.innerText = comp === 'mtr' ? '4. Station' : '4. Bus Stop';
-        
         if(!isRestoring) resetUI(2); 
         await loadRoutes(comp);
     });
@@ -220,7 +315,10 @@
         await loadStops(e.target.value);
     });
 
-    els.stop.addEventListener('change', () => { saveHistory(); fetchETA(); });
+    els.stop.addEventListener('change', () => { 
+        saveHistory(); 
+        fetchETA(); 
+    });
 
     // --- CORE LOGIC ---
     async function loadRoutes(company) {
@@ -235,12 +333,7 @@
             }
             
             const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
-            
-            els.routeList.innerHTML = uniqueRoutes.map(r => {
-                const name = company === 'mtr' ? ` (${MTR_DATA[r].n})` : '';
-                return `<option value="${r}">${r}${name}</option>`;
-            }).join('');
-            
+            els.routeList.innerHTML = uniqueRoutes.map(r => `<option value="${r}">${r}${company === 'mtr' ? ` (${MTR_DATA[r].n})` : ''}</option>`).join('');
             els.routeInput.placeholder = company === 'mtr' ? "Type Line (e.g. TWL)" : "Type route (e.g. 104)";
             els.routeInput.disabled = false;
 
@@ -255,10 +348,7 @@
         const company = els.company.value; let options = [];
         
         if (company === 'mtr') {
-            options = [
-                { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` },
-                { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` }
-            ];
+            options = [ { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` }, { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` } ];
         } else if (company === 'kmb') {
             const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
             options = variants.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
@@ -284,11 +374,9 @@
         
         try {
             let stops = [];
-            
             if (company === 'mtr') {
                 stops = MTR_DATA[route].s.split('|').map((str, idx) => {
-                    let [id, name, lat, long] = str.split(',');
-                    return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
+                    let [id, name, lat, long] = str.split(','); return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
                 });
             } else if (company === 'kmb') {
                 const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); const json = await res.json();
@@ -340,32 +428,19 @@
     async function fetchETA() {
         els.container.style.display = 'block'; els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
         const company = els.company.value; const route = els.routeInput.value; const stopId = els.stop.value; const dir = els.direction.value;
+        checkCurrentIsFavorite();
 
         try {
             let etas = [];
-            
             if (company === 'mtr') {
-                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`);
-                const json = await res.json();
-                const key = `${route}-${stopId}`;
-                
+                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`); const json = await res.json(); const key = `${route}-${stopId}`;
                 if (json.status === 1 && json.data && json.data[key] && json.data[key][dir]) {
-                    etas = json.data[key][dir].map(t => {
-                        // FIXED: Uses the specific train's destination code (t.dest) to look up the exact station name
-                        const specificDest = mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal";
-                        return {
-                            isMtr: true, ttnt: t.ttnt,
-                            dest_en: specificDest
-                        };
-                    });
+                    etas = json.data[key][dir].map(t => ({ isMtr: true, ttnt: t.ttnt, dest_en: mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal" }));
                 }
             } else {
                 let url = company === 'kmb' ? `/api/kmb/eta/${stopId}/${route}/1` : `/api/ctb/eta/${stopId}/${route}`;
                 const res = await fetch(url); const json = await res.json();
-                etas = json.data.filter(x => {
-                    if(company === 'kmb') return x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O');
-                    return x.route === route; 
-                });
+                etas = json.data.filter(x => { return company === 'kmb' ? (x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O')) : (x.route === route); });
             }
 
             if (etas.length === 0) { els.result.innerHTML = '<div class="loading-text">No upcoming schedules found.</div>'; return; }
@@ -373,51 +448,23 @@
             let html = '';
             etas.slice(0, 3).forEach(bus => {
                 let timeDisplay = "---";
-                if (company === 'mtr') {
-                    timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`;
-                } else if (bus.eta) {
-                    const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
-                    timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`;
-                }
+                if (company === 'mtr') { timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`; } 
+                else if (bus.eta) { const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000); timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`; }
                 
                 const cardClass = company === 'mtr' ? 'eta-card mtr-card' : 'eta-card';
-                html += `
-                    <div class="${cardClass}">
-                        <div class="eta-info"><span class="eta-dest">To ${bus.dest_en}</span><span class="eta-desc">${company.toUpperCase()}</span></div>
-                        <span class="eta-time">${timeDisplay}</span>
-                    </div>`;
+                html += `<div class="${cardClass}"><div class="eta-info"><span class="eta-dest">To ${bus.dest_en}</span><span class="eta-desc">${company.toUpperCase()}</span></div><span class="eta-time">${timeDisplay}</span></div>`;
             });
             els.result.innerHTML = html;
         } catch (e) { els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>'; }
     }
 
     // --- UTILS ---
-    async function fetchKMBStopData() {
-        try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); } catch {}
-    }
-
-    function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-        var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); 
-        var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c;
-    }
+    async function fetchKMBStopData() { try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); } catch {} }
+    function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) { var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
     function deg2rad(deg) { return deg * (Math.PI/180); }
-
-    function saveHistory() {
-        if(!els.company.value) return;
-        const data = { company: els.company.value, route: els.routeInput.value, direction: els.direction.value, stop: els.stop.value };
-        localStorage.setItem('hkBusHistory', JSON.stringify(data));
-    }
-    function restoreHistory() {
-        const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-        if (saved && saved.company) { isRestoring = true; els.company.value = saved.company; els.company.dispatchEvent(new Event('change')); }
-    }
-    function resetUI(level) {
-        if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; }
-        if(level <= 3) { els.direction.innerHTML = '<option>Select...</option>'; els.direction.disabled = true; }
-        if(level <= 4) { els.stop.innerHTML = '<option>Select...</option>'; els.stop.disabled = true; }
-        els.container.style.display = 'none';
-    }
+    function saveHistory() { if(!els.company.value) return; const data = { company: els.company.value, route: els.routeInput.value, direction: els.direction.value, stop: els.stop.value }; localStorage.setItem('hkBusHistory', JSON.stringify(data)); checkCurrentIsFavorite(); }
+    function restoreHistory() { const saved = JSON.parse(localStorage.getItem('hkBusHistory')); if (saved && saved.company) { isRestoring = true; els.company.value = saved.company; els.company.dispatchEvent(new Event('change')); } }
+    function resetUI(level) { if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; } if(level <= 3) { els.direction.innerHTML = '<option>Select...</option>'; els.direction.disabled = true; } if(level <= 4) { els.stop.innerHTML = '<option>Select...</option>'; els.stop.disabled = true; } els.container.style.display = 'none'; checkCurrentIsFavorite(); }
     const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 </script>
 </body>
