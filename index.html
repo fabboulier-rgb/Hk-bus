@@ -16,7 +16,7 @@
             --bg: #fafafa; --surface: #ffffff; --border: #eaeaea;
             --text-primary: #111111; --text-secondary: #666666;
             --accent: #0070f3; --accent-glow: rgba(0, 112, 243, 0.1);
-            --mtr-red: #D90036; /* Official MTR Color */
+            --mtr-red: #D90036; 
             --radius: 8px; --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
@@ -136,14 +136,17 @@
 </main>
 
 <script>
-    // --- MTR EMBEDDED DICTIONARY (Compact format to save space) ---
-    // Format: Line: { n: Name, d: {UP, DOWN}, s: "ID,Name,Lat,Long|..." }
+    // --- MTR DICTIONARY (Updated with all 9 lines) ---
     const MTR_DATA = {
         'TWL': { n: 'Tsuen Wan Line', d: {UP:'Tsuen Wan', DOWN:'Central'}, s: "CEN,Central,22.2818,114.1582|ADM,Admiralty,22.2795,114.1645|TST,Tsim Sha Tsui,22.2976,114.1722|JOR,Jordan,22.3049,114.1717|YMT,Yau Ma Tei,22.3130,114.1706|MOK,Mong Kok,22.3192,114.1698|PRE,Prince Edward,22.3246,114.1683|SSP,Sham Shui Po,22.3307,114.1622|CSW,Cheung Sha Wan,22.3371,114.1553|LCK,Lai Chi Kok,22.3369,114.1483|MEF,Mei Foo,22.3334,114.1396|LAK,Lai King,22.3483,114.1271|KWF,Kwai Fong,22.3564,114.1279|KWH,Kwai Hing,22.3633,114.1315|TWH,Tai Wo Hau,22.3705,114.1235|TSW,Tsuen Wan,22.3739,114.1186" },
         'ISL': { n: 'Island Line', d: {UP:'Chai Wan', DOWN:'Kennedy Town'}, s: "KET,Kennedy Town,22.2815,114.1277|HKU,HKU,22.2838,114.1352|SYP,Sai Ying Pun,22.2865,114.1422|SHW,Sheung Wan,22.2872,114.1523|CEN,Central,22.2818,114.1582|ADM,Admiralty,22.2795,114.1645|WAC,Wan Chai,22.2778,114.1731|CAB,Causeway Bay,22.2803,114.1852|TIH,Tin Hau,22.2825,114.1917|FOH,Fortress Hill,22.2882,114.1939|NOP,North Point,22.2921,114.2007|QUB,Quarry Bay,22.2885,114.2112|TAK,Tai Koo,22.2847,114.2168|SWH,Sai Wan Ho,22.2822,114.2219|SKW,Shau Kei Wan,22.2783,114.2294|HFC,Heng Fa Chuen,22.2773,114.2396|CHW,Chai Wan,22.2646,114.2374" },
-        'KTL': { n: 'Kwun Tong Line', d: {UP:'Tiu Keng Leng', DOWN:'Whampoa'}, s: "WHA,Whampoa,22.3033,114.1896|HOM,Ho Man Tin,22.3128,114.1818|YMT,Yau Ma Tei,22.3130,114.1706|MOK,Mong Kok,22.3192,114.1698|PRE,Prince Edward,22.3246,114.1683|SKM,Shek Kip Mei,22.3315,114.1686|KOT,Kowloon Tong,22.3372,114.1758|LOF,Lok Fu,22.3382,114.1867|WTS,Wong Tai Sin,22.3418,114.1935|CHH,Diamond Hill,22.3402,114.2017|CHW,Choi Hung,22.3344,114.2118|KOB,Kowloon Bay,22.3235,114.2144|NTK,Ngau Tau Kok,22.3157,114.2185|KWT,Kwun Tong,22.3125,114.2263|LAT,Lam Tin,22.3068,114.2368|YAT,Yau Tong,22.2974,114.2378|TIK,Tiu Keng Leng,22.3045,114.2525" },
+        'KTL': { n: 'Kwun Tong Line', d: {UP:'Tiu Keng Leng', DOWN:'Whampoa'}, s: "WHA,Whampoa,22.3033,114.1896|HOM,Ho Man Tin,22.3128,114.1818|YMT,Yau Ma Tei,22.3130,114.1706|MOK,Mong Kok,22.3192,114.1698|PRE,Prince Edward,22.3246,114.1683|SKM,Shek Kip Mei,22.3315,114.1686|KOT,Kowloon Tong,22.3372,114.1758|LOF,Lok Fu,22.3382,114.1867|WTS,Wong Tai Sin,22.3418,114.1935|DIH,Diamond Hill,22.3402,114.2017|CHH,Choi Hung,22.3344,114.2118|KOB,Kowloon Bay,22.3235,114.2144|NTK,Ngau Tau Kok,22.3157,114.2185|KWT,Kwun Tong,22.3125,114.2263|LAT,Lam Tin,22.3068,114.2368|YAT,Yau Tong,22.2974,114.2378|TIK,Tiu Keng Leng,22.3045,114.2525" },
         'TCL': { n: 'Tung Chung Line', d: {UP:'Tung Chung', DOWN:'Hong Kong'}, s: "HOK,Hong Kong,22.2847,114.1581|KOW,Kowloon,22.3043,114.1615|OLY,Olympic,22.3177,114.1601|NAC,Nam Cheong,22.3253,114.1539|LAK,Lai King,22.3483,114.1271|TSY,Tsing Yi,22.3584,114.1069|SUN,Sunny Bay,22.3315,114.0326|TUC,Tung Chung,22.2891,113.9413" },
-        'EAL': { n: 'East Rail Line', d: {UP:'Lo Wu/Lok Ma Chau', DOWN:'Admiralty'}, s: "ADM,Admiralty,22.2795,114.1645|EXC,Exhibition Centre,22.2825,114.1755|HUH,Hung Hom,22.3031,114.1813|MKK,Mong Kok East,22.3220,114.1724|KOT,Kowloon Tong,22.3372,114.1758|TAW,Tai Wai,22.3730,114.1788|SHT,Sha Tin,22.3820,114.1878|FOT,Fo Tan,22.3965,114.1983|RAC,Racecourse,22.4002,114.2045|UNI,University,22.4132,114.2104|TAP,Tai Po Market,22.4438,114.1645|TWO,Tai Wo,22.4509,114.1598|FAN,Fanling,22.4919,114.1388|SHS,Sheung Shui,22.5015,114.1278|LOW,Lo Wu,22.5284,114.1132|LMC,Lok Ma Chau,22.5160,114.0655" }
+        'EAL': { n: 'East Rail Line', d: {UP:'Lo Wu/Lok Ma Chau', DOWN:'Admiralty'}, s: "ADM,Admiralty,22.2795,114.1645|EXC,Exhibition Centre,22.2825,114.1755|HUH,Hung Hom,22.3031,114.1813|MKK,Mong Kok East,22.3220,114.1724|KOT,Kowloon Tong,22.3372,114.1758|TAW,Tai Wai,22.3730,114.1788|SHT,Sha Tin,22.3820,114.1878|FOT,Fo Tan,22.3965,114.1983|RAC,Racecourse,22.4002,114.2045|UNI,University,22.4132,114.2104|TAP,Tai Po Market,22.4438,114.1645|TWO,Tai Wo,22.4509,114.1598|FAN,Fanling,22.4919,114.1388|SHS,Sheung Shui,22.5015,114.1278|LOW,Lo Wu,22.5284,114.1132|LMC,Lok Ma Chau,22.5160,114.0655" },
+        'TKL': { n: 'Tseung Kwan O Line', d: {UP:'Po Lam/LOHAS', DOWN:'North Point'}, s: "NOP,North Point,22.2921,114.2007|QUB,Quarry Bay,22.2885,114.2112|YAT,Yau Tong,22.2974,114.2378|TIK,Tiu Keng Leng,22.3045,114.2525|TKO,Tseung Kwan O,22.3072,114.2596|HAH,Hang Hau,22.3156,114.2644|POA,Po Lam,22.3228,114.2581|LHP,LOHAS Park,22.2965,114.2691" },
+        'TML': { n: 'Tuen Ma Line', d: {UP:'Tuen Mun', DOWN:'Wu Kai Sha'}, s: "WKS,Wu Kai Sha,22.4285,114.2446|MOS,Ma On Shan,22.4251,114.2319|HEO,Heng On,22.4184,114.2251|TSH,Tai Shui Hang,22.4086,114.2215|SHM,Shek Mun,22.3879,114.2085|CIO,City One,22.3824,114.2045|STW,Sha Tin Wai,22.3780,114.1950|CKT,Che Kung Temple,22.3746,114.1852|TAW,Tai Wai,22.3730,114.1788|HIK,Hin Keng,22.3644,114.1714|DIH,Diamond Hill,22.3402,114.2017|KAT,Kai Tak,22.3320,114.1983|SUW,Sung Wong Toi,22.3275,114.1912|TKW,To Kwa Wan,22.3168,114.1882|HOM,Ho Man Tin,22.3128,114.1818|HUH,Hung Hom,22.3031,114.1813|ETS,East Tsim Sha Tsui,22.2961,114.1748|AUS,Austin,22.3039,114.1663|NAC,Nam Cheong,22.3253,114.1539|MEF,Mei Foo,22.3334,114.1396|TWW,Tsuen Wan West,22.3686,114.1121|KSR,Kam Sheung Road,22.4338,114.0645|YUL,Yuen Long,22.4462,114.0347|LOP,Long Ping,22.4475,114.0255|TIS,Tin Shui Wai,22.4497,114.0042|SIH,Siu Hong,22.4116,113.9789|TUM,Tuen Mun,22.3941,113.9740" },
+        'SIL': { n: 'South Island Line', d: {UP:'South Horizons', DOWN:'Admiralty'}, s: "ADM,Admiralty,22.2795,114.1645|OCP,Ocean Park,22.2479,114.1746|WCH,Wong Chuk Hang,22.2482,114.1678|LET,Lei Tung,22.2422,114.1558|SOH,South Horizons,22.2435,114.1481" },
+        'AEL': { n: 'Airport Express', d: {UP:'AsiaWorld-Expo', DOWN:'Hong Kong'}, s: "HOK,Hong Kong,22.2847,114.1581|KOW,Kowloon,22.3043,114.1615|TSY,Tsing Yi,22.3584,114.1069|AIR,Airport,22.3155,113.9366|AWE,AsiaWorld-Expo,22.3211,113.9436" }
     };
 
     const els = {
@@ -276,7 +279,6 @@
             let stops = [];
             
             if (company === 'mtr') {
-                // Parse the embedded MTR string
                 stops = MTR_DATA[route].s.split('|').map((str, idx) => {
                     let [id, name, lat, long] = str.split(',');
                     return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
