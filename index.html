@@ -92,7 +92,7 @@
         .eta-card.mtr-card .eta-desc { color: var(--mtr-red); background: rgba(217, 0, 54, 0.1); }
         
         .loading-text { text-align: center; color: var(--text-secondary); font-size: 14px; padding: 20px; font-weight: 500; }
-        .transit-icon { width: 24px; height: 24px; background: #111; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+        .transit-icon { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
         /* FOOTER & MODAL */
         .bmc-container { margin-top: 40px; text-align: center; padding-top: 20px; border-top: 1px solid var(--border); }
@@ -116,8 +116,9 @@
 
 <main>
     <header>
-    <h2><div class="transit-icon">F-D</div>Fai-D <title>Fai-D - Next Bus & MTR</title> </h2>
+    <h2><img src="/android-chrome-192x192.png" alt="Fai-D Logo" class="transit-icon">Fai-D Transit</h2>
     </header>
+
 
     <div id="favRow" class="fav-row" style="display: none;"></div>
 
