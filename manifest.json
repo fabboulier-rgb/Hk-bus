@@ -7,7 +7,9 @@
   "lang": "en",
   "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#111111",
   "theme_color": "#111111",
   "orientation": "portrait-primary",
@@ -24,7 +26,7 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ], 
+  ],  
   "screenshots": [
     {
       "src": "/screen1.jpg",
@@ -40,5 +42,6 @@
     }
   ]
 }
+
 
 
