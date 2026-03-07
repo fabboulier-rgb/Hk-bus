@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "Fai-D - Next Bus & MTR",
+  "name": "Fai-D - Next Bus 'n' MTR",
   "short_name": "Fai-D",
   "description": "A blazing fast, ad-free live ETA tracker for Hong Kong KMB, Citybus, and MTR.",
   "categories": ["travel", "navigation", "utilities"],
@@ -42,6 +42,7 @@
     }
   ]
 }
+
 
 
 
