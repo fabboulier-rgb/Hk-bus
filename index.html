@@ -62,17 +62,14 @@
         select:focus, input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 4px var(--border); }
         select:disabled, input:disabled { background-color: #f5f5f5; color: #999; cursor: not-allowed; border-color: transparent; box-shadow: none; }
         
-        /* CUSTOM DROPDOWN (NEW) */
+        /* CUSTOM DROPDOWN */
         .dropdown-list {
             position: absolute; top: 100%; left: 0; right: 0; background: var(--surface);
             border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius);
             max-height: 220px; overflow-y: auto; z-index: 100; display: none;
             box-shadow: 0 8px 16px rgba(0,0,0,0.1);
         }
-        .dropdown-item {
-            padding: 12px 16px; font-size: 15px; cursor: pointer; border-bottom: 1px solid var(--border);
-            color: var(--text-primary);
-        }
+        .dropdown-item { padding: 12px 16px; font-size: 15px; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text-primary); }
         .dropdown-item:last-child { border-bottom: none; }
         .dropdown-item:active, .dropdown-item:hover { background: #f5f5f5; }
 
@@ -97,10 +94,22 @@
         .loading-text { text-align: center; color: var(--text-secondary); font-size: 14px; padding: 20px; font-weight: 500; }
         .transit-icon { width: 24px; height: 24px; background: #111; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
 
-        /* BUY ME A COFFEE */
+        /* FOOTER & MODAL */
         .bmc-container { margin-top: 40px; text-align: center; padding-top: 20px; border-top: 1px solid var(--border); }
         .bmc-btn { display: inline-flex; align-items: center; gap: 8px; background-color: #FFDD00; color: #000000; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 99px; text-decoration: none; box-shadow: 0 4px 10px rgba(255, 221, 0, 0.3); transition: transform 0.2s; }
         .bmc-btn:active { transform: scale(0.95); }
+        .footer-links { margin-top: 20px; font-size: 12px; }
+        .footer-links a { color: var(--text-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; padding: 8px; border-radius: 6px; transition: background 0.2s; }
+        .footer-links a:hover { background: var(--border); color: var(--text-primary); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; opacity: 0; transition: opacity 0.2s; }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content { background: var(--surface); padding: 24px; border-radius: 16px; max-width: 400px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); transform: translateY(20px); transition: transform 0.2s; }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-content h3 { margin-top: 0; margin-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+        .modal-content p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; }
+        .modal-content strong { color: var(--text-primary); }
+        .modal-close-btn { width: 100%; padding: 12px; background: var(--text-primary); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -175,9 +184,21 @@
         <a href="https://www.buymeacoffee.com/YOUR_USERNAME" target="_blank" class="bmc-btn">
             ☕ Buy me a coffee
         </a>
-        <div style="font-size: 11px; color: #999; margin-top: 10px;">Ad-free forever.</div>
+        <div class="footer-links">
+            <a href="#" onclick="openModal(); return false;">ℹ️ About & Privacy</a>
+        </div>
     </div>
 </main>
+
+<div id="aboutModal" class="modal-overlay" onclick="if(event.target === this) closeModal();">
+    <div class="modal-content">
+        <h3>ℹ️ About & Privacy</h3>
+        <p><strong>Open Data Attribution</strong><br>Data is provided by DATA.GOV.HK. This application is an independent weekend project and is not affiliated with, endorsed by, or connected to the Transport Department, MTR Corporation, KMB, or Citybus.</p>
+        <p><strong>Location Privacy</strong><br>This app requests Location permissions strictly to calculate the distance to nearby transit stops. Your GPS data is processed entirely locally on your device. It is never transmitted to, stored on, or shared with our servers or any third parties.</p>
+        <p><strong>Local Storage</strong><br>Your saved "Favorite" routes are stored locally in your device's browser to improve your experience. Clearing your browser data will delete these favorites.</p>
+        <button class="modal-close-btn" onclick="closeModal()">Got it</button>
+    </div>
+</div>
 
 <script>
     // --- FULL MTR DICTIONARY ---
@@ -194,7 +215,12 @@
     };
 
     let mtrStationMap = {};
-    Object.values(MTR_DATA).forEach(line => { line.s.split('|').forEach(station => { const parts = station.split(','); mtrStationMap[parts[0]] = parts[1]; }); });
+    Object.values(MTR_DATA).forEach(line => {
+        line.s.split('|').forEach(station => {
+            const parts = station.split(',');
+            mtrStationMap[parts[0]] = parts[1];
+        });
+    });
 
     const els = {
         locToggle: document.getElementById('locationToggle'), gpsBtn: document.getElementById('gpsRefreshBtn'),
@@ -202,11 +228,12 @@
         routeDropdown: document.getElementById('routeDropdown'), direction: document.getElementById('directionSelect'),
         stop: document.getElementById('stopSelect'), container: document.getElementById('resultContainer'),
         result: document.getElementById('result'), lblRoute: document.getElementById('lbl-route'), lblStop: document.getElementById('lbl-stop'),
-        favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn')
+        favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn'),
+        modal: document.getElementById('aboutModal')
     };
 
     let allRoutes = []; 
-    let currentUniqueRoutes = []; // NEW: Stores active company routes
+    let currentUniqueRoutes = []; 
     let kmbStopMap = {}; 
     let isRestoring = false; 
     let userLocation = null; 
@@ -218,6 +245,10 @@
         await fetchKMBStopData(); 
         restoreHistory(); 
     })();
+
+    // --- MODAL LOGIC ---
+    function openModal() { els.modal.classList.add('active'); }
+    function closeModal() { els.modal.classList.remove('active'); }
 
     // --- FAVORITES LOGIC ---
     function renderFavorites() {
@@ -292,11 +323,15 @@
     // --- LOCATION LOGIC ---
     els.locToggle.addEventListener('change', async (e) => {
         if(e.target.checked) {
-            if(confirm("We need your location to automatically select the nearest stop.\n\nClick OK to allow.")) { 
+            const consent = confirm("We need your location to automatically select the nearest stop.\n\nClick OK to allow.");
+            if(consent) { 
                 updateLocation(); 
-            } else { e.target.checked = false; }
+            } else { 
+                e.target.checked = false; 
+            }
         } else {
-            userLocation = null; els.gpsBtn.style.display = 'none'; 
+            userLocation = null; 
+            els.gpsBtn.style.display = 'none'; 
         }
     });
 
@@ -306,11 +341,14 @@
             (pos) => {
                 userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
                 els.gpsBtn.innerText = '⟳'; 
-                if(!els.stop.disabled && els.stop.options.length > 1 && !isRestoring) autoSelectNearestStop();
+                if(!els.stop.disabled && els.stop.options.length > 1 && !isRestoring) {
+                    autoSelectNearestStop();
+                }
             },
             (err) => { 
                 alert("Location permission denied or GPS error."); 
-                els.locToggle.checked = false; els.gpsBtn.style.display = 'none'; 
+                els.locToggle.checked = false; 
+                els.gpsBtn.style.display = 'none'; 
             },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
@@ -326,10 +364,9 @@
         await loadRoutes(comp);
     });
 
-    // --- NEW RESPONSIVE DROPDOWN LOGIC ---
     els.routeInput.addEventListener('input', (e) => {
         const val = e.target.value.toUpperCase();
-        e.target.value = val; // Force visual uppercase instantly
+        e.target.value = val; 
         
         els.routeDropdown.innerHTML = '';
         const matches = val ? currentUniqueRoutes.filter(r => r.includes(val)) : currentUniqueRoutes;
@@ -355,7 +392,6 @@
         els.routeDropdown.style.display = 'block';
     }
 
-    // Handle Dropdown Item Clicks
     els.routeDropdown.addEventListener('click', (e) => {
         const item = e.target.closest('.dropdown-item');
         if (item) {
@@ -367,14 +403,12 @@
         }
     });
 
-    // Close Dropdown on outside click and strict validate
     document.addEventListener('click', (e) => {
         if (!els.routeInput.contains(e.target) && !els.routeDropdown.contains(e.target)) {
             els.routeDropdown.style.display = 'none';
-            // Validation: If they typed nonsense or a wrong company route, clear it automatically
             if (els.routeInput.value && !currentUniqueRoutes.includes(els.routeInput.value)) {
                 els.routeInput.value = '';
-                resetUI(3); // Reset direction and stop
+                resetUI(3);
             }
         }
     });
@@ -393,7 +427,7 @@
     async function loadRoutes(company) {
         els.routeInput.placeholder = "Loading..."; 
         els.routeInput.disabled = true;
-        els.routeInput.value = ''; // Ensure previous cross-company input is wiped completely
+        els.routeInput.value = ''; 
         
         try {
             if (company === 'mtr') {
@@ -405,7 +439,6 @@
                 allRoutes = data.data;
             }
             
-            // Populate the clean array used by our custom dropdown
             currentUniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
             
             els.routeInput.placeholder = company === 'mtr' ? "Type Line (e.g. TWL)" : "Type route (e.g. 104)";
@@ -426,49 +459,68 @@
         let options = [];
         
         if (company === 'mtr') {
-            options = [ { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` }, { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` } ];
+            options = [
+                { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` },
+                { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` }
+            ];
         } else if (company === 'kmb') {
             const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
             options = variants.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
         } else {
             const r = allRoutes.find(x => x.route === routeNo);
-            if (r) { options = [ { val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` } ]; }
+            if (r) {
+                options = [
+                    { val: 'outbound', txt: `To ${r.dest_en}` }, 
+                    { val: 'inbound', txt: `To ${r.orig_en}` }
+                ];
+            }
         }
         
         const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
+        
         els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
         uniqueOptions.forEach(o => els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`);
         els.direction.disabled = false;
 
         if(isRestoring) {
             const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-            if(saved && saved.direction) { els.direction.value = saved.direction; loadStops(saved.direction); }
+            if(saved && saved.direction) { 
+                els.direction.value = saved.direction; 
+                loadStops(saved.direction); 
+            }
         }
     }
 
     async function loadStops(dir) {
-        const company = els.company.value; const route = els.routeInput.value;
+        const company = els.company.value; 
+        const route = els.routeInput.value;
         els.stop.innerHTML = '<option>Loading...</option>';
         
         try {
             let stops = [];
+            
             if (company === 'mtr') {
                 stops = MTR_DATA[route].s.split('|').map((str, idx) => {
                     let [id, name, lat, long] = str.split(',');
                     return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
                 });
             } else if (company === 'kmb') {
-                const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); const json = await res.json();
+                const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); 
+                const json = await res.json();
+                
                 stops = json.data.map(s => {
                     const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
                     return { id: s.stop, seq: parseInt(s.seq), name: info.name, lat: info.lat, long: info.long };
                 });
             } else {
-                const res = await fetch(`/api/ctb/stops/${route}/${dir}`); const json = await res.json();
+                const res = await fetch(`/api/ctb/stops/${route}/${dir}`); 
+                const json = await res.json();
+                
                 const promises = json.data.map(async (s) => {
                     let name = s.stop; let lat = s.lat; let long = s.long;
                     try { 
-                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); const nd = await nr.json(); 
+                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
+                        const nd = await nr.json(); 
                         if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; } 
                     } catch {}
                     return { id: s.stop, seq: parseInt(s.seq), name: name, lat: lat, long: long };
@@ -484,11 +536,17 @@
             stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
             els.stop.disabled = false;
 
-            if(userLocation && !isRestoring) { autoSelectNearestStop(); }
+            if(userLocation && !isRestoring) { 
+                autoSelectNearestStop(); 
+            }
             
             if(isRestoring) {
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-                if(saved && saved.stop) { els.stop.value = saved.stop; fetchETA(); isRestoring = false; }
+                if(saved && saved.stop) { 
+                    els.stop.value = saved.stop; 
+                    fetchETA(); 
+                    isRestoring = false; 
+                }
             } else { saveHistory(); }
         } catch (e) { console.error(e); els.stop.innerHTML = '<option>Error</option>'; }
     }
@@ -501,44 +559,73 @@
         stops.forEach(s => {
             if(s.lat && s.long) {
                 const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.long, s.lat, s.long);
-                if(d < minInfo.dist) { minInfo = { dist: d, id: s.id }; }
+                if(d < minInfo.dist) { 
+                    minInfo = { dist: d, id: s.id }; 
+                }
             }
         });
 
-        if(minInfo.id) { els.stop.value = minInfo.id; fetchETA(); saveHistory(); }
+        if(minInfo.id) { 
+            els.stop.value = minInfo.id; 
+            fetchETA(); 
+            saveHistory(); 
+        }
     }
 
     async function fetchETA() {
         els.container.style.display = 'block'; 
         els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
         
-        const company = els.company.value; const route = els.routeInput.value; 
-        const stopId = els.stop.value; const dir = els.direction.value;
+        const company = els.company.value; 
+        const route = els.routeInput.value; 
+        const stopId = els.stop.value; 
+        const dir = els.direction.value;
+        
         checkCurrentIsFavorite();
 
         try {
             let etas = [];
+            
             if (company === 'mtr') {
-                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`); const json = await res.json();
+                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`);
+                const json = await res.json();
                 const key = `${route}-${stopId}`;
+                
                 if (json.status === 1 && json.data && json.data[key] && json.data[key][dir]) {
                     etas = json.data[key][dir].map(t => {
-                        return { isMtr: true, ttnt: t.ttnt, dest_en: mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal" };
+                        const specificDest = mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal";
+                        return {
+                            isMtr: true, 
+                            ttnt: t.ttnt,
+                            dest_en: specificDest
+                        };
                     });
                 }
             } else {
                 let url = company === 'kmb' ? `/api/kmb/eta/${stopId}/${route}/1` : `/api/ctb/eta/${stopId}/${route}`;
-                const res = await fetch(url); const json = await res.json();
-                etas = json.data.filter(x => { return company === 'kmb' ? (x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O')) : x.route === route; });
+                const res = await fetch(url); 
+                const json = await res.json();
+                
+                etas = json.data.filter(x => {
+                    if(company === 'kmb') return x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O');
+                    return x.route === route; 
+                });
             }
 
-            if (etas.length === 0) { els.result.innerHTML = '<div class="loading-text">No upcoming schedules found.</div>'; return; }
+            if (etas.length === 0) { 
+                els.result.innerHTML = '<div class="loading-text">No upcoming schedules found.</div>'; 
+                return; 
+            }
 
             let html = '';
             etas.slice(0, 3).forEach(bus => {
                 let timeDisplay = "---";
-                if (company === 'mtr') { timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`; } 
-                else if (bus.eta) { const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000); timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`; }
+                if (company === 'mtr') {
+                    timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`;
+                } else if (bus.eta) {
+                    const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
+                    timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`;
+                }
                 
                 const cardClass = company === 'mtr' ? 'eta-card mtr-card' : 'eta-card';
                 html += `
@@ -555,32 +642,60 @@
     }
 
     // --- UTILITIES ---
-    async function fetchKMBStopData() { try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); } catch {} }
+    async function fetchKMBStopData() {
+        try { 
+            const r = await fetch('/api/kmb/stop-names'); 
+            const j = await r.json(); 
+            j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
+        } catch {}
+    }
 
     function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-        var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); 
+        var R = 6371; 
+        var dLat = deg2rad(lat2-lat1);  
+        var dLon = deg2rad(lon2-lon1); 
         var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
         var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
         return R * c;
     }
+    
     function deg2rad(deg) { return deg * (Math.PI/180); }
 
     function saveHistory() {
         if(!els.company.value || !els.routeInput.value) return;
-        const data = { company: els.company.value, route: els.routeInput.value, direction: els.direction.value, stop: els.stop.value };
+        const data = { 
+            company: els.company.value, 
+            route: els.routeInput.value, 
+            direction: els.direction.value, 
+            stop: els.stop.value 
+        };
         localStorage.setItem('hkBusHistory', JSON.stringify(data));
         checkCurrentIsFavorite();
     }
 
     function restoreHistory() {
         const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-        if (saved && saved.company) { isRestoring = true; els.company.value = saved.company; els.company.dispatchEvent(new Event('change')); }
+        if (saved && saved.company) { 
+            isRestoring = true; 
+            els.company.value = saved.company; 
+            els.company.dispatchEvent(new Event('change')); 
+        }
     }
 
     function resetUI(level) {
-        if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; els.routeDropdown.style.display = 'none'; }
-        if(level <= 3) { els.direction.innerHTML = '<option>Select...</option>'; els.direction.disabled = true; }
-        if(level <= 4) { els.stop.innerHTML = '<option>Select...</option>'; els.stop.disabled = true; }
+        if(level <= 2) { 
+            els.routeInput.value = ''; 
+            els.routeInput.disabled = true; 
+            els.routeDropdown.style.display = 'none'; 
+        }
+        if(level <= 3) { 
+            els.direction.innerHTML = '<option>Select...</option>'; 
+            els.direction.disabled = true; 
+        }
+        if(level <= 4) { 
+            els.stop.innerHTML = '<option>Select...</option>'; 
+            els.stop.disabled = true; 
+        }
         els.container.style.display = 'none';
         checkCurrentIsFavorite();
     }
