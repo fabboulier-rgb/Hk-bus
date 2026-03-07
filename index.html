@@ -61,7 +61,20 @@
         select, input { width: 100%; padding: 12px 16px; font-size: 16px; font-family: var(--font-stack); color: var(--text-primary); background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); appearance: none; outline: none; transition: all 0.15s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
         select:focus, input:focus { border-color: var(--text-secondary); box-shadow: 0 0 0 4px var(--border); }
         select:disabled, input:disabled { background-color: #f5f5f5; color: #999; cursor: not-allowed; border-color: transparent; box-shadow: none; }
-        #routeInput { text-transform: uppercase; }
+        
+        /* CUSTOM DROPDOWN (NEW) */
+        .dropdown-list {
+            position: absolute; top: 100%; left: 0; right: 0; background: var(--surface);
+            border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+            max-height: 220px; overflow-y: auto; z-index: 100; display: none;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        .dropdown-item {
+            padding: 12px 16px; font-size: 15px; cursor: pointer; border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:active, .dropdown-item:hover { background: #f5f5f5; }
 
         /* RESULTS */
         #resultContainer { margin-top: 25px; display: none; }
@@ -112,7 +125,7 @@
     
     <div class="control-group">
         <label>1. Transport</label>
-        <div class="select-wrapper">
+        <div class="select-wrapper" style="z-index: 4;">
             <select id="companySelect">
                 <option value="" disabled selected>Select Provider</option>
                 <option value="mtr">MTR (Next Train)</option>
@@ -125,15 +138,15 @@
 
     <div class="control-group">
         <label id="lbl-route">2. Route (Type or Scroll)</label>
-        <div class="select-wrapper">
-            <input list="routeList" id="routeInput" placeholder="Select Provider First..." disabled autocomplete="off" oninput="this.value = this.value.toUpperCase()">
-            <datalist id="routeList"></datalist>
+        <div class="select-wrapper" style="z-index: 3;">
+            <input type="text" id="routeInput" placeholder="Select Provider First..." disabled autocomplete="off">
+            <div id="routeDropdown" class="dropdown-list"></div>
         </div>
     </div>
 
     <div class="control-group">
         <label>3. Direction</label>
-        <div class="select-wrapper">
+        <div class="select-wrapper" style="z-index: 2;">
             <select id="directionSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
@@ -141,7 +154,7 @@
 
     <div class="control-group">
         <label id="lbl-stop">4. Bus Stop</label>
-        <div class="select-wrapper">
+        <div class="select-wrapper" style="z-index: 1;">
             <select id="stopSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
@@ -180,25 +193,20 @@
         'AEL': { n: 'Airport Express', d: {UP:'AsiaWorld-Expo', DOWN:'Hong Kong'}, s: "HOK,Hong Kong,22.2847,114.1581|KOW,Kowloon,22.3043,114.1615|TSY,Tsing Yi,22.3584,114.1069|AIR,Airport,22.3155,113.9366|AWE,AsiaWorld-Expo,22.3211,113.9436" }
     };
 
-    // Create a reverse mapping for MTR Stations (e.g. LHP -> LOHAS Park)
     let mtrStationMap = {};
-    Object.values(MTR_DATA).forEach(line => {
-        line.s.split('|').forEach(station => {
-            const parts = station.split(',');
-            mtrStationMap[parts[0]] = parts[1];
-        });
-    });
+    Object.values(MTR_DATA).forEach(line => { line.s.split('|').forEach(station => { const parts = station.split(','); mtrStationMap[parts[0]] = parts[1]; }); });
 
     const els = {
         locToggle: document.getElementById('locationToggle'), gpsBtn: document.getElementById('gpsRefreshBtn'),
         company: document.getElementById('companySelect'), routeInput: document.getElementById('routeInput'),
-        routeList: document.getElementById('routeList'), direction: document.getElementById('directionSelect'),
+        routeDropdown: document.getElementById('routeDropdown'), direction: document.getElementById('directionSelect'),
         stop: document.getElementById('stopSelect'), container: document.getElementById('resultContainer'),
         result: document.getElementById('result'), lblRoute: document.getElementById('lbl-route'), lblStop: document.getElementById('lbl-stop'),
         favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn')
     };
 
     let allRoutes = []; 
+    let currentUniqueRoutes = []; // NEW: Stores active company routes
     let kmbStopMap = {}; 
     let isRestoring = false; 
     let userLocation = null; 
@@ -236,21 +244,11 @@
         const direction = els.direction.value;
         const stop = els.stop.value;
         
-        // Remove the "1. " sequence prefix to get a clean default name
         const rawStopName = els.stop.options[els.stop.selectedIndex].text.replace(/^\d+\.\s/, '');
-
-        // Prompt user for custom name
         let customName = prompt("Name this saved route:", rawStopName);
         
-        // If user hits cancel, abort the save entirely
-        if (customName === null) {
-            return;
-        }
-        
-        // If they leave it blank, fall back to the raw stop name
-        if (customName.trim() === "") {
-            customName = rawStopName;
-        }
+        if (customName === null) return;
+        if (customName.trim() === "") customName = rawStopName;
 
         const newFav = { company, route, direction, stop, customName };
         favorites.push(newFav);
@@ -266,10 +264,10 @@
 
     async function loadFavorite(index) {
         const fav = favorites[index];
-        isRestoring = true; // Prevent GPS from overriding the favorite
+        isRestoring = true; 
         
         els.company.value = fav.company;
-        els.company.dispatchEvent(new Event('change')); // Update labels
+        els.company.dispatchEvent(new Event('change')); 
         await loadRoutes(fav.company);
         
         els.routeInput.value = fav.route;
@@ -286,11 +284,7 @@
     }
 
     function checkCurrentIsFavorite() {
-        const c = els.company.value; 
-        const r = els.routeInput.value;
-        const d = els.direction.value; 
-        const s = els.stop.value;
-        
+        const c = els.company.value, r = els.routeInput.value, d = els.direction.value, s = els.stop.value;
         const isFav = favorites.some(f => f.company === c && f.route === r && f.direction === d && f.stop === s);
         els.saveFavBtn.style.display = (c && r && d && s && !isFav) ? 'flex' : 'none';
     }
@@ -298,33 +292,25 @@
     // --- LOCATION LOGIC ---
     els.locToggle.addEventListener('change', async (e) => {
         if(e.target.checked) {
-            const consent = confirm("We need your location to automatically select the nearest stop.\n\nClick OK to allow.");
-            if(consent) { 
+            if(confirm("We need your location to automatically select the nearest stop.\n\nClick OK to allow.")) { 
                 updateLocation(); 
-            } else { 
-                e.target.checked = false; 
-            }
+            } else { e.target.checked = false; }
         } else {
-            userLocation = null; 
-            els.gpsBtn.style.display = 'none'; 
+            userLocation = null; els.gpsBtn.style.display = 'none'; 
         }
     });
 
     function updateLocation() {
-        els.gpsBtn.style.display = 'flex'; 
-        els.gpsBtn.innerText = '...';
+        els.gpsBtn.style.display = 'flex'; els.gpsBtn.innerText = '...';
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 userLocation = { lat: pos.coords.latitude, long: pos.coords.longitude };
                 els.gpsBtn.innerText = '⟳'; 
-                if(!els.stop.disabled && els.stop.options.length > 1 && !isRestoring) {
-                    autoSelectNearestStop();
-                }
+                if(!els.stop.disabled && els.stop.options.length > 1 && !isRestoring) autoSelectNearestStop();
             },
             (err) => { 
                 alert("Location permission denied or GPS error."); 
-                els.locToggle.checked = false; 
-                els.gpsBtn.style.display = 'none'; 
+                els.locToggle.checked = false; els.gpsBtn.style.display = 'none'; 
             },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
@@ -340,11 +326,56 @@
         await loadRoutes(comp);
     });
 
+    // --- NEW RESPONSIVE DROPDOWN LOGIC ---
     els.routeInput.addEventListener('input', (e) => {
-        const routeNo = e.target.value.toUpperCase();
-        if (allRoutes.some(r => r.route === routeNo)) {
-            loadDirections(routeNo);
+        const val = e.target.value.toUpperCase();
+        e.target.value = val; // Force visual uppercase instantly
+        
+        els.routeDropdown.innerHTML = '';
+        const matches = val ? currentUniqueRoutes.filter(r => r.includes(val)) : currentUniqueRoutes;
+        renderDropdown(matches);
+    });
+
+    els.routeInput.addEventListener('focus', () => {
+        const val = els.routeInput.value.toUpperCase();
+        const matches = val ? currentUniqueRoutes.filter(r => r.includes(val)) : currentUniqueRoutes;
+        renderDropdown(matches);
+    });
+
+    function renderDropdown(matches) {
+        if (matches.length === 0) {
+            els.routeDropdown.style.display = 'none';
+            return;
+        }
+        const company = els.company.value;
+        els.routeDropdown.innerHTML = matches.map(r => {
+            const extraName = company === 'mtr' ? `<span style="color:#888; font-size:13px; margin-left:6px;">(${MTR_DATA[r].n})</span>` : '';
+            return `<div class="dropdown-item" data-route="${r}">${r}${extraName}</div>`;
+        }).join('');
+        els.routeDropdown.style.display = 'block';
+    }
+
+    // Handle Dropdown Item Clicks
+    els.routeDropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('.dropdown-item');
+        if (item) {
+            const selectedRoute = item.getAttribute('data-route');
+            els.routeInput.value = selectedRoute;
+            els.routeDropdown.style.display = 'none';
+            loadDirections(selectedRoute);
             if(!isRestoring) saveHistory();
+        }
+    });
+
+    // Close Dropdown on outside click and strict validate
+    document.addEventListener('click', (e) => {
+        if (!els.routeInput.contains(e.target) && !els.routeDropdown.contains(e.target)) {
+            els.routeDropdown.style.display = 'none';
+            // Validation: If they typed nonsense or a wrong company route, clear it automatically
+            if (els.routeInput.value && !currentUniqueRoutes.includes(els.routeInput.value)) {
+                els.routeInput.value = '';
+                resetUI(3); // Reset direction and stop
+            }
         }
     });
 
@@ -362,6 +393,7 @@
     async function loadRoutes(company) {
         els.routeInput.placeholder = "Loading..."; 
         els.routeInput.disabled = true;
+        els.routeInput.value = ''; // Ensure previous cross-company input is wiped completely
         
         try {
             if (company === 'mtr') {
@@ -373,19 +405,15 @@
                 allRoutes = data.data;
             }
             
-            const uniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
-            
-            els.routeList.innerHTML = uniqueRoutes.map(r => {
-                const name = company === 'mtr' ? ` (${MTR_DATA[r].n})` : '';
-                return `<option value="${r}">${r}${name}</option>`;
-            }).join('');
+            // Populate the clean array used by our custom dropdown
+            currentUniqueRoutes = [...new Set(allRoutes.map(r => r.route))].sort(naturalSort);
             
             els.routeInput.placeholder = company === 'mtr' ? "Type Line (e.g. TWL)" : "Type route (e.g. 104)";
             els.routeInput.disabled = false;
 
             if(isRestoring) {
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-                if(saved && saved.route) { 
+                if(saved && saved.route && currentUniqueRoutes.includes(saved.route)) { 
                     els.routeInput.value = saved.route; 
                     loadDirections(saved.route); 
                 }
@@ -398,73 +426,50 @@
         let options = [];
         
         if (company === 'mtr') {
-            options = [
-                { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` },
-                { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` }
-            ];
+            options = [ { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` }, { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` } ];
         } else if (company === 'kmb') {
             const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
             options = variants.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
         } else {
             const r = allRoutes.find(x => x.route === routeNo);
-            if (r) {
-                options = [
-                    { val: 'outbound', txt: `To ${r.dest_en}` }, 
-                    { val: 'inbound', txt: `To ${r.orig_en}` }
-                ];
-            }
+            if (r) { options = [ { val: 'outbound', txt: `To ${r.dest_en}` }, { val: 'inbound', txt: `To ${r.orig_en}` } ]; }
         }
         
         const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
-        
         els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
         uniqueOptions.forEach(o => els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`);
         els.direction.disabled = false;
 
         if(isRestoring) {
             const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-            if(saved && saved.direction) { 
-                els.direction.value = saved.direction; 
-                loadStops(saved.direction); 
-            }
+            if(saved && saved.direction) { els.direction.value = saved.direction; loadStops(saved.direction); }
         }
     }
 
     async function loadStops(dir) {
-        const company = els.company.value; 
-        const route = els.routeInput.value;
+        const company = els.company.value; const route = els.routeInput.value;
         els.stop.innerHTML = '<option>Loading...</option>';
         
         try {
             let stops = [];
-            
             if (company === 'mtr') {
                 stops = MTR_DATA[route].s.split('|').map((str, idx) => {
                     let [id, name, lat, long] = str.split(',');
                     return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
                 });
             } else if (company === 'kmb') {
-                const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); 
-                const json = await res.json();
-                
+                const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); const json = await res.json();
                 stops = json.data.map(s => {
                     const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
                     return { id: s.stop, seq: parseInt(s.seq), name: info.name, lat: info.lat, long: info.long };
                 });
             } else {
-                const res = await fetch(`/api/ctb/stops/${route}/${dir}`); 
-                const json = await res.json();
-                
+                const res = await fetch(`/api/ctb/stops/${route}/${dir}`); const json = await res.json();
                 const promises = json.data.map(async (s) => {
                     let name = s.stop; let lat = s.lat; let long = s.long;
                     try { 
-                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
-                        const nd = await nr.json(); 
-                        if(nd.data) { 
-                            name = nd.data.name_en; 
-                            lat = nd.data.lat; 
-                            long = nd.data.long; 
-                        } 
+                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); const nd = await nr.json(); 
+                        if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; } 
                     } catch {}
                     return { id: s.stop, seq: parseInt(s.seq), name: name, lat: lat, long: long };
                 });
@@ -479,20 +484,12 @@
             stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
             els.stop.disabled = false;
 
-            if(userLocation && !isRestoring) { 
-                autoSelectNearestStop(); 
-            }
+            if(userLocation && !isRestoring) { autoSelectNearestStop(); }
             
             if(isRestoring) {
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-                if(saved && saved.stop) { 
-                    els.stop.value = saved.stop; 
-                    fetchETA(); 
-                    isRestoring = false; 
-                }
-            } else { 
-                saveHistory(); 
-            }
+                if(saved && saved.stop) { els.stop.value = saved.stop; fetchETA(); isRestoring = false; }
+            } else { saveHistory(); }
         } catch (e) { console.error(e); els.stop.innerHTML = '<option>Error</option>'; }
     }
 
@@ -504,73 +501,44 @@
         stops.forEach(s => {
             if(s.lat && s.long) {
                 const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.long, s.lat, s.long);
-                if(d < minInfo.dist) { 
-                    minInfo = { dist: d, id: s.id }; 
-                }
+                if(d < minInfo.dist) { minInfo = { dist: d, id: s.id }; }
             }
         });
 
-        if(minInfo.id) { 
-            els.stop.value = minInfo.id; 
-            fetchETA(); 
-            saveHistory(); 
-        }
+        if(minInfo.id) { els.stop.value = minInfo.id; fetchETA(); saveHistory(); }
     }
 
     async function fetchETA() {
         els.container.style.display = 'block'; 
         els.result.innerHTML = '<div class="loading-text">Fetching Live ETA...</div>';
         
-        const company = els.company.value; 
-        const route = els.routeInput.value; 
-        const stopId = els.stop.value; 
-        const dir = els.direction.value;
-        
+        const company = els.company.value; const route = els.routeInput.value; 
+        const stopId = els.stop.value; const dir = els.direction.value;
         checkCurrentIsFavorite();
 
         try {
             let etas = [];
-            
             if (company === 'mtr') {
-                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`);
-                const json = await res.json();
+                const res = await fetch(`/api/mtr?line=${route}&sta=${stopId}`); const json = await res.json();
                 const key = `${route}-${stopId}`;
-                
                 if (json.status === 1 && json.data && json.data[key] && json.data[key][dir]) {
                     etas = json.data[key][dir].map(t => {
-                        const specificDest = mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal";
-                        return {
-                            isMtr: true, 
-                            ttnt: t.ttnt,
-                            dest_en: specificDest
-                        };
+                        return { isMtr: true, ttnt: t.ttnt, dest_en: mtrStationMap[t.dest] || MTR_DATA[route].d[dir] || "Terminal" };
                     });
                 }
             } else {
                 let url = company === 'kmb' ? `/api/kmb/eta/${stopId}/${route}/1` : `/api/ctb/eta/${stopId}/${route}`;
-                const res = await fetch(url); 
-                const json = await res.json();
-                
-                etas = json.data.filter(x => {
-                    if(company === 'kmb') return x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O');
-                    return x.route === route; 
-                });
+                const res = await fetch(url); const json = await res.json();
+                etas = json.data.filter(x => { return company === 'kmb' ? (x.route === route && x.dir === (dir === 'inbound' ? 'I' : 'O')) : x.route === route; });
             }
 
-            if (etas.length === 0) { 
-                els.result.innerHTML = '<div class="loading-text">No upcoming schedules found.</div>'; 
-                return; 
-            }
+            if (etas.length === 0) { els.result.innerHTML = '<div class="loading-text">No upcoming schedules found.</div>'; return; }
 
             let html = '';
             etas.slice(0, 3).forEach(bus => {
                 let timeDisplay = "---";
-                if (company === 'mtr') {
-                    timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`;
-                } else if (bus.eta) {
-                    const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
-                    timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`;
-                }
+                if (company === 'mtr') { timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`; } 
+                else if (bus.eta) { const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000); timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`; }
                 
                 const cardClass = company === 'mtr' ? 'eta-card mtr-card' : 'eta-card';
                 html += `
@@ -587,60 +555,32 @@
     }
 
     // --- UTILITIES ---
-    async function fetchKMBStopData() {
-        try { 
-            const r = await fetch('/api/kmb/stop-names'); 
-            const j = await r.json(); 
-            j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
-        } catch {}
-    }
+    async function fetchKMBStopData() { try { const r = await fetch('/api/kmb/stop-names'); const j = await r.json(); j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); } catch {} }
 
-    // Haversine formula for calculating GPS distance
     function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-        var R = 6371; 
-        var dLat = deg2rad(lat2-lat1);  
-        var dLon = deg2rad(lon2-lon1); 
+        var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1); 
         var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
         var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
         return R * c;
     }
-    
     function deg2rad(deg) { return deg * (Math.PI/180); }
 
     function saveHistory() {
-        if(!els.company.value) return;
-        const data = { 
-            company: els.company.value, 
-            route: els.routeInput.value, 
-            direction: els.direction.value, 
-            stop: els.stop.value 
-        };
+        if(!els.company.value || !els.routeInput.value) return;
+        const data = { company: els.company.value, route: els.routeInput.value, direction: els.direction.value, stop: els.stop.value };
         localStorage.setItem('hkBusHistory', JSON.stringify(data));
         checkCurrentIsFavorite();
     }
 
     function restoreHistory() {
         const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-        if (saved && saved.company) { 
-            isRestoring = true; 
-            els.company.value = saved.company; 
-            els.company.dispatchEvent(new Event('change')); 
-        }
+        if (saved && saved.company) { isRestoring = true; els.company.value = saved.company; els.company.dispatchEvent(new Event('change')); }
     }
 
     function resetUI(level) {
-        if(level <= 2) { 
-            els.routeInput.value = ''; 
-            els.routeInput.disabled = true; 
-        }
-        if(level <= 3) { 
-            els.direction.innerHTML = '<option>Select...</option>'; 
-            els.direction.disabled = true; 
-        }
-        if(level <= 4) { 
-            els.stop.innerHTML = '<option>Select...</option>'; 
-            els.stop.disabled = true; 
-        }
+        if(level <= 2) { els.routeInput.value = ''; els.routeInput.disabled = true; els.routeDropdown.style.display = 'none'; }
+        if(level <= 3) { els.direction.innerHTML = '<option>Select...</option>'; els.direction.disabled = true; }
+        if(level <= 4) { els.stop.innerHTML = '<option>Select...</option>'; els.stop.disabled = true; }
         els.container.style.display = 'none';
         checkCurrentIsFavorite();
     }
