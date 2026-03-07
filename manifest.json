@@ -28,15 +28,16 @@
   "screenshots": [
     {
       "src": "/screen1.jpg",
-      "sizes": "1080x2089",
+      "sizes": "1080x2061",
       "type": "image/jpeg",
       "form_factor": "narrow"
     },
     {
       "src": "/screen2.jpg",
-      "sizes": "1080x2080",
+      "sizes": "1080x2058",
       "type": "image/jpeg",
       "form_factor": "narrow"
     }
   ]
 }
+
