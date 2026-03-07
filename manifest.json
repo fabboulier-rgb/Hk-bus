@@ -1,7 +1,7 @@
 {
-  "name": "hk-bus-track",
-  "short_name": "hk-bus",
-  "description": "An awesome app built to track Hong Kong Bus.",
+  "name": "Fai-D - Next Bus & MTR",
+  "short_name": "Fai-D",
+  "description": "A blazing fast, ad-free tracker for Hong Kong KMB, Citybus, and MTR.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
