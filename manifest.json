@@ -10,8 +10,8 @@
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#121519",
+  "theme_color": "#121519",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -42,8 +42,3 @@
     }
   ]
 }
-
-
-
-
-
