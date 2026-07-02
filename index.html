@@ -154,17 +154,17 @@
     </div>
 
     <div class="control-group">
-        <label>3. Direction - Where do you want to go?</label>
+        <label id="lbl-stop">3. Boarding At (Where are you now?)</label>
         <div class="select-wrapper" style="z-index: 2;">
-            <select id="directionSelect" disabled><option>Select...</option></select>
+            <select id="stopSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
     </div>
 
     <div class="control-group">
-        <label id="lbl-stop">4. Boarding At - Where are you now?</label>
+        <label id="lbl-dir">4. Direction (Where do you want to go?)</label>
         <div class="select-wrapper" style="z-index: 1;">
-            <select id="stopSelect" disabled><option>Select...</option></select>
+            <select id="directionSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
         </div>
     </div>
@@ -228,13 +228,14 @@
         routeDropdown: document.getElementById('routeDropdown'), direction: document.getElementById('directionSelect'),
         stop: document.getElementById('stopSelect'), container: document.getElementById('resultContainer'),
         result: document.getElementById('result'), lblRoute: document.getElementById('lbl-route'), lblStop: document.getElementById('lbl-stop'),
-        favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn'),
+        lblDir: document.getElementById('lbl-dir'), favRow: document.getElementById('favRow'), saveFavBtn: document.getElementById('saveFavBtn'),
         modal: document.getElementById('aboutModal')
     };
 
     let allRoutes = []; 
     let currentUniqueRoutes = []; 
     let kmbStopMap = {}; 
+    let currentValidDirs = {}; // MAPS STOP ID TO AVAILABLE BOUNDS
     let isRestoring = false; 
     let userLocation = null; 
     let favorites = JSON.parse(localStorage.getItem('hkBusFavs')) || [];
@@ -302,12 +303,12 @@
         await loadRoutes(fav.company);
         
         els.routeInput.value = fav.route;
-        loadDirections(fav.route);
-        
-        els.direction.value = fav.direction;
-        await loadStops(fav.direction);
+        await loadStopsAllDirections(fav.route);
         
         els.stop.value = fav.stop;
+        loadValidDestinations(fav.stop);
+        
+        els.direction.value = fav.direction;
         
         isRestoring = false;
         fetchETA();
@@ -354,11 +355,31 @@
         );
     }
 
-    // --- APP EVENTS ---
+    function autoSelectNearestStop() {
+        if(!userLocation || !els.stop.dataset.stopsData) return;
+        const stops = JSON.parse(els.stop.dataset.stopsData);
+        let minInfo = { dist: 999999, id: null };
+
+        stops.forEach(s => {
+            if(s.lat && s.long) {
+                const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.long, s.lat, s.long);
+                if(d < minInfo.dist) { 
+                    minInfo = { dist: d, id: s.id }; 
+                }
+            }
+        });
+
+        if(minInfo.id) { 
+            els.stop.value = minInfo.id; 
+            loadValidDestinations(minInfo.id); 
+        }
+    }
+
+    // --- APP EVENTS (UX FLOW REORDERED) ---
     els.company.addEventListener('change', async (e) => {
         const comp = e.target.value;
         els.lblRoute.innerText = comp === 'mtr' ? '2. Line (Type or Scroll)' : '2. Route (Type or Scroll)';
-        els.lblStop.innerText = comp === 'mtr' ? '4. Boarding At - Where are you now?' : '4. Boarding At - Where are you now?';
+        els.lblStop.innerText = comp === 'mtr' ? '3. Boarding At (Station)' : '3. Boarding At (Where are you now?)';
         
         if(!isRestoring) resetUI(2); 
         await loadRoutes(comp);
@@ -392,14 +413,16 @@
         els.routeDropdown.style.display = 'block';
     }
 
-    els.routeDropdown.addEventListener('click', (e) => {
+    els.routeDropdown.addEventListener('click', async (e) => {
         const item = e.target.closest('.dropdown-item');
         if (item) {
             const selectedRoute = item.getAttribute('data-route');
             els.routeInput.value = selectedRoute;
             els.routeDropdown.style.display = 'none';
-            loadDirections(selectedRoute);
             if(!isRestoring) saveHistory();
+            
+            // UX UPDATE: Load all stops immediately after route is picked
+            await loadStopsAllDirections(selectedRoute);
         }
     });
 
@@ -413,17 +436,18 @@
         }
     });
 
-    els.direction.addEventListener('change', async (e) => {
-        if(!isRestoring) resetUI(4);
-        await loadStops(e.target.value);
+    els.stop.addEventListener('change', (e) => { 
+        saveHistory(); 
+        // UX UPDATE: Only calculate valid directions once the stop is picked
+        loadValidDestinations(e.target.value); 
     });
 
-    els.stop.addEventListener('change', () => { 
+    els.direction.addEventListener('change', () => { 
         saveHistory(); 
         fetchETA(); 
     });
 
-    // --- CORE LOGIC ---
+    // --- CORE API & DATA LOGIC ---
     async function loadRoutes(company) {
         els.routeInput.placeholder = "Loading..."; 
         els.routeInput.disabled = true;
@@ -448,92 +472,105 @@
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
                 if(saved && saved.route && currentUniqueRoutes.includes(saved.route)) { 
                     els.routeInput.value = saved.route; 
-                    loadDirections(saved.route); 
+                    await loadStopsAllDirections(saved.route); 
                 }
             }
         } catch (e) { alert("Error loading routes"); }
     }
 
-    function loadDirections(routeNo) {
+    async function loadStopsAllDirections(routeNo) {
         const company = els.company.value; 
-        let options = [];
-        
-        if (company === 'mtr') {
-            options = [
-                { val: 'UP', txt: `To ${MTR_DATA[routeNo].d.UP}` },
-                { val: 'DOWN', txt: `To ${MTR_DATA[routeNo].d.DOWN}` }
-            ];
-        } else if (company === 'kmb') {
-            const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
-            options = variants.map(v => ({ val: v.bound === 'I'?'inbound':'outbound', txt: `To ${v.dest_en}` }));
-        } else {
-            const r = allRoutes.find(x => x.route === routeNo);
-            if (r) {
-                options = [
-                    { val: 'outbound', txt: `To ${r.dest_en}` }, 
-                    { val: 'inbound', txt: `To ${r.orig_en}` }
-                ];
-            }
-        }
-        
-        const uniqueOptions = [...new Map(options.map(item => [item.txt, item])).values()];
-        
-        els.direction.innerHTML = '<option value="" disabled selected>Select Direction</option>';
-        uniqueOptions.forEach(o => els.direction.innerHTML += `<option value="${o.val}">${o.txt}</option>`);
-        els.direction.disabled = false;
-
-        if(isRestoring) {
-            const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
-            if(saved && saved.direction) { 
-                els.direction.value = saved.direction; 
-                loadStops(saved.direction); 
-            }
-        }
-    }
-
-    async function loadStops(dir) {
-        const company = els.company.value; 
-        const route = els.routeInput.value;
         els.stop.innerHTML = '<option>Loading...</option>';
+        els.stop.disabled = true;
+        els.direction.innerHTML = '<option value="" disabled selected>Select Boarding Stop First</option>';
+        els.direction.disabled = true;
+        currentValidDirs = {};
         
         try {
-            let stops = [];
+            let mergedStops = [];
+            let uniqueStopsMap = new Map();
             
             if (company === 'mtr') {
-                stops = MTR_DATA[route].s.split('|').map((str, idx) => {
+                const lineData = MTR_DATA[routeNo];
+                const stops = lineData.s.split('|').map((str, idx) => {
                     let [id, name, lat, long] = str.split(',');
                     return { id, seq: idx+1, name, lat: parseFloat(lat), long: parseFloat(long) };
                 });
+                
+                stops.forEach(s => {
+                    uniqueStopsMap.set(s.id, s);
+                    currentValidDirs[s.id] = [
+                        { val: 'UP', txt: `To ${lineData.d.UP}` },
+                        { val: 'DOWN', txt: `To ${lineData.d.DOWN}` }
+                    ];
+                });
+                mergedStops = Array.from(uniqueStopsMap.values());
+                
             } else if (company === 'kmb') {
-                const res = await fetch(`/api/kmb/stops/${route}/${dir}/1`); 
-                const json = await res.json();
+                const variants = allRoutes.filter(r => r.route === routeNo && r.service_type == '1');
                 
-                stops = json.data.map(s => {
-                    const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
-                    return { id: s.stop, seq: parseInt(s.seq), name: info.name, lat: info.lat, long: info.long };
-                });
-            } else {
-                const res = await fetch(`/api/ctb/stops/${route}/${dir}`); 
-                const json = await res.json();
+                for (let v of variants) {
+                    const dirCode = v.bound === 'I' ? 'inbound' : 'outbound';
+                    const boundVal = v.bound === 'I' ? 'inbound' : 'outbound';
+                    const destTxt = `To ${v.dest_en}`;
+                    
+                    const res = await fetch(`/api/kmb/stops/${routeNo}/${dirCode}/1`); 
+                    const json = await res.json();
+                    
+                    if(json.data) {
+                        json.data.forEach(s => {
+                            if (!uniqueStopsMap.has(s.stop)) {
+                                const info = kmbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
+                                uniqueStopsMap.set(s.stop, { id: s.stop, name: info.name, lat: info.lat, long: info.long });
+                            }
+                            if (!currentValidDirs[s.stop]) currentValidDirs[s.stop] = [];
+                            if (!currentValidDirs[s.stop].some(d => d.val === boundVal)) {
+                                currentValidDirs[s.stop].push({ val: boundVal, txt: destTxt });
+                            }
+                        });
+                    }
+                }
+                mergedStops = Array.from(uniqueStopsMap.values());
                 
-                const promises = json.data.map(async (s) => {
-                    let name = s.stop; let lat = s.lat; let long = s.long;
-                    try { 
-                        const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
-                        const nd = await nr.json(); 
-                        if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; } 
-                    } catch {}
-                    return { id: s.stop, seq: parseInt(s.seq), name: name, lat: lat, long: long };
-                });
-                stops = await Promise.all(promises);
+            } else if (company === 'ctb') {
+                const r = allRoutes.find(x => x.route === routeNo);
+                if (r) {
+                    // Fetch both directions concurrently for speed
+                    let inboundReq = fetch(`/api/ctb/stops/${routeNo}/inbound`).then(res=>res.json()).catch(()=>({data:[]}));
+                    let outboundReq = fetch(`/api/ctb/stops/${routeNo}/outbound`).then(res=>res.json()).catch(()=>({data:[]}));
+                    let [inData, outData] = await Promise.all([inboundReq, outboundReq]);
+                    
+                    let combined = [];
+                    if(inData.data) inData.data.forEach(s => combined.push({...s, bound: 'inbound', txt: `To ${r.orig_en}`}));
+                    if(outData.data) outData.data.forEach(s => combined.push({...s, bound: 'outbound', txt: `To ${r.dest_en}`}));
+                    
+                    const promises = combined.map(async (s) => {
+                        let name = s.stop, lat = s.lat, long = s.long;
+                        if(!uniqueStopsMap.has(s.stop)) {
+                            try { 
+                                const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
+                                const nd = await nr.json(); 
+                                if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; } 
+                            } catch(e) {}
+                            uniqueStopsMap.set(s.stop, { id: s.stop, name: name, lat: lat, long: long });
+                        }
+                        if (!currentValidDirs[s.stop]) currentValidDirs[s.stop] = [];
+                        if (!currentValidDirs[s.stop].some(x => x.val === s.bound)) {
+                            currentValidDirs[s.stop].push({ val: s.bound, txt: s.txt });
+                        }
+                    });
+                    await Promise.all(promises);
+                    mergedStops = Array.from(uniqueStopsMap.values());
+                }
             }
             
-            stops.sort((a,b) => a.seq - b.seq);
-            els.stop.dataset.stopsData = JSON.stringify(stops);
+            els.stop.dataset.stopsData = JSON.stringify(mergedStops);
             
-            const placeholder = company === 'mtr' ? 'Select Station' : 'Select Bus Stop';
+            const placeholder = company === 'mtr' ? 'Select Station' : 'Select Boarding Stop';
             els.stop.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
-            stops.forEach(s => els.stop.innerHTML += `<option value="${s.id}">${s.seq}. ${s.name}</option>`);
+            mergedStops.forEach((s, idx) => {
+                els.stop.innerHTML += `<option value="${s.id}">${idx+1}. ${s.name}</option>`;
+            });
             els.stop.disabled = false;
 
             if(userLocation && !isRestoring) { 
@@ -544,31 +581,38 @@
                 const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
                 if(saved && saved.stop) { 
                     els.stop.value = saved.stop; 
-                    fetchETA(); 
-                    isRestoring = false; 
+                    loadValidDestinations(saved.stop); 
                 }
             } else { saveHistory(); }
-        } catch (e) { console.error(e); els.stop.innerHTML = '<option>Error</option>'; }
+            
+        } catch (e) { 
+            console.error(e); 
+            els.stop.innerHTML = '<option>Error loading</option>'; 
+        }
     }
 
-    function autoSelectNearestStop() {
-        if(!userLocation || !els.stop.dataset.stopsData) return;
-        const stops = JSON.parse(els.stop.dataset.stopsData);
-        let minInfo = { dist: 999999, id: null };
-
-        stops.forEach(s => {
-            if(s.lat && s.long) {
-                const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.long, s.lat, s.long);
-                if(d < minInfo.dist) { 
-                    minInfo = { dist: d, id: s.id }; 
-                }
-            }
+    function loadValidDestinations(stopId) {
+        const dirs = currentValidDirs[stopId] || [];
+        els.direction.innerHTML = '<option value="" disabled selected>Select Destination...</option>';
+        dirs.forEach(d => {
+            els.direction.innerHTML += `<option value="${d.val}">${d.txt}</option>`;
         });
+        els.direction.disabled = false;
 
-        if(minInfo.id) { 
-            els.stop.value = minInfo.id; 
-            fetchETA(); 
-            saveHistory(); 
+        // Auto-select if there is only 1 valid direction from this stop
+        if (dirs.length === 1 && !isRestoring) {
+            els.direction.value = dirs[0].val;
+            fetchETA();
+            saveHistory();
+        }
+
+        if(isRestoring) {
+            const saved = JSON.parse(localStorage.getItem('hkBusHistory'));
+            if(saved && saved.direction) { 
+                els.direction.value = saved.direction; 
+                fetchETA(); 
+                isRestoring = false; 
+            }
         }
     }
 
@@ -689,12 +733,12 @@
             els.routeDropdown.style.display = 'none'; 
         }
         if(level <= 3) { 
-            els.direction.innerHTML = '<option>Select...</option>'; 
-            els.direction.disabled = true; 
-        }
-        if(level <= 4) { 
             els.stop.innerHTML = '<option>Select...</option>'; 
             els.stop.disabled = true; 
+        }
+        if(level <= 4) { 
+            els.direction.innerHTML = '<option>Select...</option>'; 
+            els.direction.disabled = true; 
         }
         els.container.style.display = 'none';
         checkCurrentIsFavorite();
