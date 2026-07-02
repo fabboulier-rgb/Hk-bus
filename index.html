@@ -162,7 +162,7 @@
     </div>
 
     <div class="control-group">
-        <label id="lbl-stop">4. Bus Stop</label>
+        <label id="lbl-stop">4. Boarding At (Where are you now?)</label>
         <div class="select-wrapper" style="z-index: 1;">
             <select id="stopSelect" disabled><option>Select...</option></select>
             <div class="arrow"></div>
@@ -358,7 +358,7 @@
     els.company.addEventListener('change', async (e) => {
         const comp = e.target.value;
         els.lblRoute.innerText = comp === 'mtr' ? '2. Line (Type or Scroll)' : '2. Route (Type or Scroll)';
-        els.lblStop.innerText = comp === 'mtr' ? '4. Station' : '4. Bus Stop';
+        els.lblStop.innerText = comp === 'mtr' ? '4. Boarding At (Where are you now?)' : '4. Boarding At (Where are you now?)';
         
         if(!isRestoring) resetUI(2); 
         await loadRoutes(comp);
