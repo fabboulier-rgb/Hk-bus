@@ -628,15 +628,23 @@
                 if (company === 'mtr') {
                     timeDisplay = bus.ttnt === "0" ? "NOW" : `${bus.ttnt}<span>min</span>`;
                     const mtrColor = MTR_DATA[route].c;
-                    // Apply dynamic border color and a beautiful 10% opacity background for the badge
                     dynamicCardStyle = `style="border-left-color: ${mtrColor};"`;
                     dynamicBadgeStyle = `style="color: ${mtrColor}; background: ${mtrColor}1A;"`;
                 } else if (bus.eta) {
                     const diffMins = Math.round((new Date(bus.eta) - new Date()) / 60000);
                     timeDisplay = diffMins <= 0 ? "NOW" : `${diffMins}<span>min</span>`;
+                    
+                    // --- NOUVEAU : Couleurs officielles KMB et Citybus ---
+                    // Optionnel : J'ai assombri un peu le texte Citybus (#B39700) pour qu'il soit lisible sur le fond jaune
+                    const busColor = company === 'kmb' ? '#D43F3A' : '#FFD800'; 
+                    const textColor = company === 'kmb' ? '#D43F3A' : '#B39700';
+                    
+                    dynamicCardStyle = `style="border-left-color: ${busColor};"`;
+                    dynamicBadgeStyle = `style="color: ${textColor}; background: ${busColor}1A;"`;
                 }
                 
-                const cardClass = company === 'mtr' ? 'eta-card mtr-card' : 'eta-card';
+                const cardClass = 'eta-card'; 
+                
                 html += `
                     <div class="${cardClass}" ${dynamicCardStyle}>
                         <div class="eta-info">
