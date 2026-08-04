@@ -655,7 +655,10 @@
                     </div>`;
             });
             els.result.innerHTML = html;
-        } catch (e) { els.result.innerHTML = '<div class="loading-text">Error fetching ETA</div>'; }
+        } catch (e) { 
+            console.error("ETA Fetch Error:", e);
+            els.result.innerHTML = `<div class="loading-text" style="color: var(--mtr-red);">⚠️ Error: ${e.message}. Please try again.</div>`; 
+        }
     }
 
     // --- UTILITIES ---
