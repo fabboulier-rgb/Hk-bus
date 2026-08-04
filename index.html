@@ -702,10 +702,15 @@
     // --- UTILITIES ---
     async function fetchKMBStopData() {
         try { 
-            const r = await fetch('/api/kmb/stop-names'); 
+            // On se connecte directement à l'API officielle Open Data pour le dictionnaire KMB
+            const r = await fetch('https://data.etabus.gov.hk/v1/transport/kmb/stop'); 
             const j = await r.json(); 
-            j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
-        } catch {}
+            if (j && j.data) {
+                j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
+            }
+        } catch (e) {
+            console.error("Erreur de téléchargement du dictionnaire KMB:", e);
+        }
     }
 
     function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
