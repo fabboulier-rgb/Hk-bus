@@ -9,5 +9,34 @@
     { "source": "/api/ctb/stop-name/:id", "destination": "https://rt.data.gov.hk/v2/transport/citybus/stop/:id" },
     { "source": "/api/ctb/eta/:stop/:route", "destination": "https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/:stop/:route" },
     { "source": "/api/mtr", "destination": "https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(kmb|ctb)/eta/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=15, stale-while-revalidate=15"
+        }
+      ]
+    },
+    {
+      "source": "/api/mtr",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=15, stale-while-revalidate=15"
+        }
+      ]
+    },
+    {
+      "source": "/api/(kmb|ctb)/(route|stops|stop-names|stop-name)(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=86400, stale-while-revalidate=86400"
+        }
+      ]
+    }
   ]
 }
