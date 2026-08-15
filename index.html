@@ -224,6 +224,9 @@
         });
     });
 
+    let kmbStopMap = {}; 
+    let ctbStopMap = {}; 
+
     const els = {
         locToggle: document.getElementById('locationToggle'), gpsBtn: document.getElementById('gpsRefreshBtn'),
         company: document.getElementById('companySelect'), routeInput: document.getElementById('routeInput'),
@@ -236,7 +239,6 @@
 
     let allRoutes = []; 
     let currentUniqueRoutes = []; 
-    let kmbStopMap = {}; 
     let currentValidDirs = {};
     let isRestoring = false; 
     let userLocation = null; 
@@ -246,6 +248,7 @@
     (async function init() {
         renderFavorites();
         await fetchKMBStopData(); 
+        await fetchCTBStopData();
         restoreHistory(); 
     })();
 
@@ -543,22 +546,16 @@
                     if(inData.data) inData.data.forEach(s => combined.push({...s, bound: 'inbound', txt: `To ${r.orig_en}`}));
                     if(outData.data) outData.data.forEach(s => combined.push({...s, bound: 'outbound', txt: `To ${r.dest_en}`}));
                     
-                    const promises = combined.map(async (s) => {
-                        let name = s.stop, lat = s.lat, long = s.long;
+                    combined.forEach((s) => {
                         if(!uniqueStopsMap.has(s.stop)) {
-                            try { 
-                                const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
-                                const nd = await nr.json(); 
-                                if(nd.data) { name = nd.data.name_en; lat = nd.data.lat; long = nd.data.long; } 
-                            } catch(e) {}
-                            uniqueStopsMap.set(s.stop, { id: s.stop, name: name, lat: lat, long: long });
+                            const info = ctbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
+                            uniqueStopsMap.set(s.stop, { id: s.stop, name: info.name, lat: info.lat, long: info.long });
                         }
                         if (!currentValidDirs[s.stop]) currentValidDirs[s.stop] = [];
                         if (!currentValidDirs[s.stop].some(x => x.val === s.bound)) {
                             currentValidDirs[s.stop].push({ val: s.bound, txt: s.txt });
                         }
                     });
-                    await Promise.all(promises);
                     mergedStops = Array.from(uniqueStopsMap.values());
                 }
             }
@@ -701,15 +698,58 @@
 
     // --- UTILITIES ---
     async function fetchKMBStopData() {
+        const CACHE_KEY = 'kmb_stops_cache';
+        const CACHE_TIME_KEY = 'kmb_stops_time';
+        const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000; 
+        
+        const now = new Date().getTime();
+        const savedTime = localStorage.getItem(CACHE_TIME_KEY);
+        const savedData = localStorage.getItem(CACHE_KEY);
+
+        if (savedData && savedTime && (now - savedTime < SEVEN_DAYS)) {
+            const stops = JSON.parse(savedData);
+            stops.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) });
+            return; 
+        }
+
         try { 
-            // On se connecte directement à l'API officielle Open Data pour le dictionnaire KMB
             const r = await fetch('https://data.etabus.gov.hk/v1/transport/kmb/stop'); 
             const j = await r.json(); 
             if (j && j.data) {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(j.data));
+                localStorage.setItem(CACHE_TIME_KEY, now.toString());
                 j.data.forEach(s => kmbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
             }
         } catch (e) {
-            console.error("Erreur de téléchargement du dictionnaire KMB:", e);
+            console.error("Erreur KMB:", e);
+        }
+    }
+
+    async function fetchCTBStopData() {
+        const CACHE_KEY = 'ctb_stops_cache';
+        const CACHE_TIME_KEY = 'ctb_stops_time';
+        const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+        
+        const now = new Date().getTime();
+        const savedTime = localStorage.getItem(CACHE_TIME_KEY);
+        const savedData = localStorage.getItem(CACHE_KEY);
+
+        if (savedData && savedTime && (now - savedTime < SEVEN_DAYS)) {
+            const stops = JSON.parse(savedData);
+            stops.forEach(s => ctbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) });
+            return; 
+        }
+
+        try { 
+            const r = await fetch('https://rt.data.gov.hk/v2/transport/citybus/stop'); 
+            const j = await r.json(); 
+            if (j && j.data) {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(j.data));
+                localStorage.setItem(CACHE_TIME_KEY, now.toString());
+                j.data.forEach(s => ctbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
+            }
+        } catch (e) {
+            console.error("Erreur téléchargement dictionnaire CTB:", e);
         }
     }
 
