@@ -247,8 +247,11 @@
     // --- INITIALIZATION ---
     (async function init() {
         renderFavorites();
+        
+        const savedCTB = localStorage.getItem('ctb_stops_cache');
+        if (savedCTB) ctbStopMap = JSON.parse(savedCTB);
+        
         await fetchKMBStopData(); 
-        await fetchCTBStopData();
         restoreHistory(); 
     })();
 
@@ -546,16 +549,42 @@
                     if(inData.data) inData.data.forEach(s => combined.push({...s, bound: 'inbound', txt: `To ${r.orig_en}`}));
                     if(outData.data) outData.data.forEach(s => combined.push({...s, bound: 'outbound', txt: `To ${r.dest_en}`}));
                     
-                    combined.forEach((s) => {
+                    let hasNewStops = false;
+                    const promises = combined.map(async (s) => {
                         if(!uniqueStopsMap.has(s.stop)) {
-                            const info = ctbStopMap[s.stop] || { name: `Stop ${s.stop}`, lat: null, long: null };
-                            uniqueStopsMap.set(s.stop, { id: s.stop, name: info.name, lat: info.lat, long: info.long });
+                            let name = `Stop ${s.stop}`, lat = null, long = null;
+                            
+                            if (ctbStopMap[s.stop]) {
+                                name = ctbStopMap[s.stop].name;
+                                lat = ctbStopMap[s.stop].lat;
+                                long = ctbStopMap[s.stop].long;
+                            } else {
+                                try { 
+                                    const nr = await fetch(`/api/ctb/stop-name/${s.stop}`); 
+                                    const nd = await nr.json(); 
+                                    if(nd.data) { 
+                                        name = nd.data.name_en; 
+                                        lat = parseFloat(nd.data.lat); 
+                                        long = parseFloat(nd.data.long); 
+                                        ctbStopMap[s.stop] = { name, lat, long };
+                                        hasNewStops = true;
+                                    } 
+                                } catch(e) {}
+                            }
+                            uniqueStopsMap.set(s.stop, { id: s.stop, name: name, lat: lat, long: long });
                         }
                         if (!currentValidDirs[s.stop]) currentValidDirs[s.stop] = [];
                         if (!currentValidDirs[s.stop].some(x => x.val === s.bound)) {
                             currentValidDirs[s.stop].push({ val: s.bound, txt: s.txt });
                         }
                     });
+                    
+                    await Promise.all(promises);
+                    
+                    if (hasNewStops) {
+                        localStorage.setItem('ctb_stops_cache', JSON.stringify(ctbStopMap));
+                    }
+                    
                     mergedStops = Array.from(uniqueStopsMap.values());
                 }
             }
@@ -722,34 +751,6 @@
             }
         } catch (e) {
             console.error("Erreur KMB:", e);
-        }
-    }
-
-    async function fetchCTBStopData() {
-        const CACHE_KEY = 'ctb_stops_cache';
-        const CACHE_TIME_KEY = 'ctb_stops_time';
-        const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-        
-        const now = new Date().getTime();
-        const savedTime = localStorage.getItem(CACHE_TIME_KEY);
-        const savedData = localStorage.getItem(CACHE_KEY);
-
-        if (savedData && savedTime && (now - savedTime < SEVEN_DAYS)) {
-            const stops = JSON.parse(savedData);
-            stops.forEach(s => ctbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) });
-            return; 
-        }
-
-        try { 
-            const r = await fetch('https://rt.data.gov.hk/v2/transport/citybus/stop'); 
-            const j = await r.json(); 
-            if (j && j.data) {
-                localStorage.setItem(CACHE_KEY, JSON.stringify(j.data));
-                localStorage.setItem(CACHE_TIME_KEY, now.toString());
-                j.data.forEach(s => ctbStopMap[s.stop] = { name: s.name_en, lat: parseFloat(s.lat), long: parseFloat(s.long) }); 
-            }
-        } catch (e) {
-            console.error("Erreur téléchargement dictionnaire CTB:", e);
         }
     }
 
